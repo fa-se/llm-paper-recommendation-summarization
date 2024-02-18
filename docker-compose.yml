@@ -4,6 +4,8 @@ services:
     build: .
     volumes:
       - .:/usr/src/app/
+    environment:
+      - OPENALEX_CONTACT_EMAIL
     depends_on:
       - db
   db:
