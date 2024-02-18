@@ -1,0 +1,30 @@
+# Git and version control
+.git/
+.gitignore
+
+# Virtual environment
+venv/
+
+# PyCharm project files
+.idea/
+
+# Compiled Python files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Testing and local development
+*.log
+*.csv
+*.json
+.flaskenv
+*.sqlite3
+
+# Docker files (to avoid recursive inclusion)
+Dockerfile
+.dockerignore

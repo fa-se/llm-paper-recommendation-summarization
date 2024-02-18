@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+
+# PyCharm project files
+.idea/
+
+# Database files
+*.sqlite3
+
+# Instance folder
+instance/
+
+# Flask
+.flaskenv
+
+# Log and data files
+*.log
+*.csv
+*.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
