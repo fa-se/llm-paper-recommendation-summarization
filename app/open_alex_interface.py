@@ -1,18 +1,25 @@
-import pyalex
-from pyalex import Works, Work
 from os import environ
+
+import pyalex
+
 pyalex.config.email = environ.get("OPENALEX_CONTACT_EMAIL")
 
-def search_works(query: str):
-    return (Works()
-            .search(query)
-            .sort(relevance_score="desc")
-            .get())
 
-def work_to_string(work: Work):
-    authors = []
+class Work:
+    def __init__(self, pyalex_work: pyalex.Work):
+        self.title = pyalex_work['title']
+        # First three authors for now
+        self.authors = [author['author']['display_name'] for author in pyalex_work['authorships'][:3]]
+        self.id = pyalex_work['ids']['openalex']
 
-    for author in work['authorships'][:3]:
-        authors.append(author['author']['display_name'])
+    def __str__(self):
+        return f"'{self.title}' by [{', '.join(self.authors)}] ({self.id})"
 
-    return f"'{work['title']}' by [{', '.join(authors)}] ({work['ids']['openalex']})"
+
+def search_works(query: str) -> [Work]:
+    pyalex_works = (pyalex.Works()
+                    .search(query)
+                    .sort(relevance_score="desc")
+                    .get())
+
+    return [Work(pyalex_work) for pyalex_work in pyalex_works]
