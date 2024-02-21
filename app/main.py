@@ -17,9 +17,9 @@ def rate(works: [Work]):
     return works
 
 
-def summarize(works: [Work]):
+def summarize(works: [Work], query: str):
     for work in works:
-        work.summary = summarize_work(work)
+        work.summary = summarize_work(work, query)
     return works
 
 @app.command()
@@ -34,9 +34,9 @@ def search_rate_summarize(query: str, limit: int = typer.Option(3, help="Summari
         print(f"{work} - relevance score: {work.relevance_score}")
 
     print(f"\nSummarizing top {limit} works:")
-    summarized_works = summarize(rated_works[:limit])
+    summarized_works = summarize(rated_works[:limit], query)
     for work in summarized_works:
-        print(f"{work} - summary: {work.summary}")
+        print(f"{work}\nSummary: {work.summary}\n")
 
 
 if __name__ == "__main__":

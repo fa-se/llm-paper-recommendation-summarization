@@ -6,6 +6,7 @@ services:
       - .:/usr/src/app/
     environment:
       - OPENALEX_CONTACT_EMAIL
+      - OPENAI_API_KEY
     depends_on:
       - db
   db:
