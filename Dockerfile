@@ -6,7 +6,8 @@ RUN apt-get update && apt-get install -y git
 
 # Set the working directory in the container
 WORKDIR /usr/src/app
-
+# And make sure Python knows about it
+ENV PYTHONPATH="${PYTHONPATH}:/usr/src/app"
 # Copy the current directory contents into the container at /usr/src/app
 COPY . .
 
