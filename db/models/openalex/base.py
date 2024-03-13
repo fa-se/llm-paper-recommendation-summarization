@@ -8,7 +8,7 @@ from db.models import Base
 class OpenAlexBase(Base):
     __abstract__ = True
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)  # ids come from OpenAlex)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)  # ids come from OpenAlex
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
     wikipedia: Mapped[str] = mapped_column(String)
