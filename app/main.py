@@ -3,16 +3,16 @@ import os
 
 import typer
 
-from db.database import Session
+from config import user_commands
 from llm_interfaces import LLMInterface, OpenAIInterface
-from llm_interfaces.tasks import AlignToExamplesTask
 from open_alex_interface import Work, search_works
 from relevance import rate_relevance
 from summary import summarize_work
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
-
+# add "user" subcommands
+app.add_typer(user_commands, name="user")
 
 def setup_logging(is_cli: bool = False) -> None:
     filename = "app.log"
@@ -55,24 +55,6 @@ def search_rate_summarize(query: str, limit: int = typer.Option(3, help="Summari
         print(f"{work}\nSummary: {work.summary}\n")
 
 
-@app.command()
-def get_matching_topics(
-        ctx: typer.Context,
-        research_area_description: str = typer.Argument(..., help="A string describing the user's area of research.")
-):
-    llm_interface: LLMInterface = ctx.obj
-    query_embedding = llm_interface.create_embedding(research_area_description)
-
-    from sqlalchemy import select, desc
-    from db.models import Topic
-
-    with Session() as session:
-        statement = select(Topic, (1 - Topic.embedding.cosine_distance(query_embedding)).label(
-            'cosine_similarity')).order_by(desc('cosine_similarity')).limit(5)
-        results = session.execute(statement).fetchall()
-
-    for result in results:
-        typer.echo(f"{result.Topic.name}: {result.cosine_similarity}")
 
 
 @app.callback(invoke_without_command=True)

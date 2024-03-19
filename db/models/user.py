@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy import Integer, String, ForeignKey, Table, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,9 +17,9 @@ class User(Base):
     __tablename__ = "user"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String)
+    name: Mapped[str] = mapped_column(String, unique=True)
     display_name: Mapped[str] = mapped_column(String)
-    email: Mapped[str] = mapped_column(String)
+    email: Mapped[Optional[str]] = mapped_column(String)
     # one-to-one relationship with UserConfig
     config: Mapped["UserConfig"] = relationship(back_populates="user")
 
@@ -30,7 +32,7 @@ class UserConfig(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"))
-
+    area_of_interest_description: Mapped[Optional[str]] = mapped_column(String)
     # each config belongs to a user
     user: Mapped["User"] = relationship(back_populates="config")
     # Many-to-Many relationship with Topic through association table
