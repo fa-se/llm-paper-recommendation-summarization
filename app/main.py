@@ -1,12 +1,25 @@
+import logging
+import os
+
 import typer
 
 from db.database import Session
 from llm_interfaces import LLMInterface, OpenAIInterface
+from llm_interfaces.tasks import AlignToExamplesTask
 from open_alex_interface import Work, search_works
 from relevance import rate_relevance
 from summary import summarize_work
 
+logger = logging.getLogger(__name__)
 app = typer.Typer()
+
+
+def setup_logging(is_cli: bool = False) -> None:
+    filename = "app.log"
+    filemode = "a"
+    fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level = logging.DEBUG if os.getenv("DEBUG") else logging.INFO
+    logging.basicConfig(level=level, format=fmt, filename=filename, filemode=filemode, force=True)
 
 
 def search(query: str):
@@ -23,6 +36,7 @@ def summarize(works: [Work], query: str):
     for work in works:
         work.summary = summarize_work(work, query)
     return works
+
 
 @app.command()
 def search_rate_summarize(query: str, limit: int = typer.Option(3, help="Summarize only the n most relevant works")):
@@ -62,9 +76,13 @@ def get_matching_topics(
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context):
+def main(ctx: typer.Context) -> None:
+    setup_logging(is_cli=True)
+
     if ctx.invoked_subcommand is None:
-        typer.echo("Please specify a subcommand.")
+        # show help if called without subcommand
+        typer.echo("No subcommand specified.")
+        typer.echo(ctx.get_help())
         raise typer.Exit(1)
     # instantiate LLMInterface, and add it to context so that it's available in command handlers
     llm_interface: LLMInterface = OpenAIInterface()
