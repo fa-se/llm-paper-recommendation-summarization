@@ -28,10 +28,49 @@ def create(user_name: str, display_name: str, email: Annotated[Optional[str], ty
 
 
 @user_commands.command()
+def add_topic(user_name: str, topic_id: int) -> None:
+    with Session() as session:
+        try:
+            user: User = session.query(User).filter(User.name == user_name).one()
+        except NoResultFound:
+            typer.echo(f"User {user_name} does not exist.")
+            raise typer.Exit(code=-1)
+
+        topic = session.query(Topic).get(topic_id)
+        if topic is None:
+            typer.echo(f"Topic with id {topic_id} does not exist.")
+            raise typer.Exit(code=-1)
+
+        user.config.topics_of_interest.append(topic)
+        session.commit()
+        typer.echo(f"Successfully added topic {topic_id} to user {user_name}")
+
+
+@user_commands.command()
+def remove_topic(user_name: str, topic_id) -> None:
+    with Session() as session:
+        try:
+            user: User = session.query(User).filter(User.name == user_name).one()
+        except NoResultFound:
+            typer.echo(f"User {user_name} does not exist.")
+            raise typer.Exit(code=-1)
+
+        topic: Topic = session.get(Topic, topic_id)
+        if topic is None:
+            typer.echo(f"Topic with id {topic_id} does not exist.")
+            raise typer.Exit(code=-1)
+
+        user.config.topics_of_interest.remove(topic)
+        session.commit()
+        typer.echo(f"Successfully removed topic {topic.name}[{topic_id}] from user {user_name}")
+
+
+@user_commands.command()
 @handle_db_exceptions
 def set_area_of_interest(context: typer.Context, user_name: str,
-                         area_of_interest_description: str = typer.Argument(...,
-                                                                            help="A string describing the user's area of interest.")) -> None:
+                         area_of_interest_description: str
+                         = typer.Argument(...,
+                                          help="A natural language description of the user's area of interest.")) -> None:
     llm_interface = context.obj
     with Session() as session:
         try:
@@ -47,13 +86,14 @@ def set_area_of_interest(context: typer.Context, user_name: str,
 
         typer.echo(f"Top 5 matching topics:")
         for topic, score in zip(topics, scores):
-            typer.echo(f"{topic.name}: Score: {score:.2f}")
+            typer.echo(f"Id: {topic.id} Name: {topic.name} Score: {score:.2f}")
         typer.echo()
         user.config.area_of_interest_description = area_of_interest_description
         user.config.topics_of_interest = topics
 
         session.commit()
-        typer.echo(f"Successfully set area of interest for user {user_name}")
+        typer.echo(f"Successfully added these topics to the list of topics followed by user {user_name}.")
+        typer.echo(f"\nIf you want to add or remove topics, use the 'user add-topic' and 'user remove-topic' commands.")
 
 
 def get_topics_from_description(session: Session, llm_interface: LLMInterface, description: str) \
