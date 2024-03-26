@@ -1,5 +1,5 @@
 typer[all]
-git+https://github.com/fa-se/pyalex.git@main#egg=pyalex # use fork with support for Topics
+pyalex
 openai
 psycopg[binary,pool]
 sqlalchemy
