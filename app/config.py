@@ -28,26 +28,8 @@ def create(user_name: str, display_name: str, email: Annotated[Optional[str], ty
 
 
 @user_commands.command()
+@handle_db_exceptions
 def add_topic(user_name: str, topic_id: int) -> None:
-    with Session() as session:
-        try:
-            user: User = session.query(User).filter(User.name == user_name).one()
-        except NoResultFound:
-            typer.echo(f"User {user_name} does not exist.")
-            raise typer.Exit(code=-1)
-
-        topic = session.query(Topic).get(topic_id)
-        if topic is None:
-            typer.echo(f"Topic with id {topic_id} does not exist.")
-            raise typer.Exit(code=-1)
-
-        user.config.topics_of_interest.append(topic)
-        session.commit()
-        typer.echo(f"Successfully added topic {topic_id} to user {user_name}")
-
-
-@user_commands.command()
-def remove_topic(user_name: str, topic_id) -> None:
     with Session() as session:
         try:
             user: User = session.query(User).filter(User.name == user_name).one()
@@ -60,9 +42,50 @@ def remove_topic(user_name: str, topic_id) -> None:
             typer.echo(f"Topic with id {topic_id} does not exist.")
             raise typer.Exit(code=-1)
 
-        user.config.topics_of_interest.remove(topic)
+        user.config.followed_topics.append(topic)
         session.commit()
-        typer.echo(f"Successfully removed topic {topic.name}[{topic_id}] from user {user_name}")
+        typer.echo(f"Successfully added topic \"{topic.name}\" [{topic_id}] to {user_name}'s followed topics.")
+
+
+@user_commands.command()
+@handle_db_exceptions
+def remove_topic(user_name: str, topic_id) -> None:
+    with Session() as session:
+        try:
+            user: User = session.query(User).filter(User.name == user_name).one()
+        except NoResultFound:
+            typer.echo(f"User {user_name} does not exist.")
+            raise typer.Exit(code=-1)
+
+        topic: Topic = session.get(Topic, topic_id)
+        if topic is None:
+            typer.echo(f"Topic with id {topic_id} does not exist.")
+            raise typer.Exit(code=-1)
+        if not topic in user.config.followed_topics:
+            typer.echo(f"Error: User {user_name} does not follow topic \"{topic.name}\" [{topic_id}].")
+            raise typer.Exit(code=-1)
+        user.config.followed_topics.remove(topic)
+        session.commit()
+        typer.echo(f"Successfully removed topic \"{topic.name}\" [{topic_id}] from {user_name}'s followed topics.")
+
+
+@user_commands.command()
+@handle_db_exceptions
+def followed_topics(user_name: str) -> None:
+    with Session() as session:
+        try:
+            user: User = session.query(User).filter(User.name == user_name).one()
+        except NoResultFound:
+            typer.echo(f"User {user_name} does not exist.")
+            raise typer.Exit(code=-1)
+
+        topics = user.config.followed_topics
+        if len(topics) == 0:
+            typer.echo(f"User {user_name} does not follow any topics.")
+        else:
+            typer.echo(f"User {user_name} follows these topics:")
+            for topic in topics:
+                typer.echo(f"Id: {topic.id} Name: {topic.name}")
 
 
 @user_commands.command()
@@ -85,14 +108,14 @@ def set_area_of_interest(
         if align: typer.echo(f"Rewriting the area of interest description to improve similarity search...")
         topics, scores, aligned_description = get_topics_from_description(session, llm_interface,
                                                                           area_of_interest_description, align=align)
-        if align: typer.echo(f"Aligned description:\n{aligned_description}\n")
+        if align: typer.echo(f"Aligned description:\n{aligned_description}")
 
-        typer.echo(f"Top 5 matching topics:")
+        typer.echo(f"\nTop 5 matching topics:")
         for topic, score in zip(topics, scores):
-            typer.echo(f"Id: {topic.id} Name: {topic.name} Score: {score:.2f}")
+            typer.echo(f"Id: {topic.id} | Name: {topic.name} | Score: {score:.2f}")
         typer.echo()
         user.config.area_of_interest_description = area_of_interest_description
-        user.config.topics_of_interest = topics
+        user.config.followed_topics = topics
 
         session.commit()
         typer.echo(f"Successfully added these topics to the list of topics followed by user {user_name}.")

@@ -6,8 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
 # Association table for Config and Topic
-userconfig_topic_of_interest_association = Table(
-    'userconfig_topic_of_interest_association', Base.metadata,
+userconfig_followed_topic_association = Table(
+    'userconfig_followed_topic_association', Base.metadata,
     Column('user_config_id', Integer, ForeignKey('user_config.id'), primary_key=True),
     Column('topic_id', Integer, ForeignKey('openalex_topic.id'), primary_key=True)
 )
@@ -36,4 +36,4 @@ class UserConfig(Base):
     # each config belongs to a user
     user: Mapped["User"] = relationship(back_populates="config")
     # Many-to-Many relationship with Topic through association table
-    topics_of_interest: Mapped[list["Topic"]] = relationship(secondary=userconfig_topic_of_interest_association)
+    followed_topics: Mapped[list["Topic"]] = relationship(secondary=userconfig_followed_topic_association)
