@@ -1,7 +1,11 @@
+import datetime
+import logging
+from itertools import chain
 from os import environ
 
 import pyalex
 
+logger = logging.getLogger(__name__)
 pyalex.config.email = environ.get("OPENALEX_CONTACT_EMAIL")
 
 
@@ -34,3 +38,24 @@ def search_works(query: str) -> [Work]:
                     .get())
 
     return [Work(pyalex_work) for pyalex_work in pyalex_works]
+
+
+def get_works_by_topics(topic_ids: [int], published_after: datetime.date, n_max: int = 2000) -> [Work]:
+    topic_filter_str = "|".join(f"T{str(topic_id)}" for topic_id in topic_ids)
+    # ISO 8601 date format
+    from_publication_date_str = published_after.strftime("%Y-%m-%d")
+    to_publication_date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    query = (pyalex.Works()
+             .filter(primary_topic={"id": topic_filter_str})
+             .filter(from_publication_date=from_publication_date_str)
+             .filter(to_publication_date=to_publication_date_str))
+
+    logger.info(
+        f"Querying OpenAlex for works with topics {topic_ids} published after {published_after} (n_max={n_max}) Query URL: {query.url}")
+
+    works = []
+    for pyalex_work in chain(*query.paginate(per_page=200, n_max=n_max)):
+        works.append(Work(pyalex_work))
+
+    return works
