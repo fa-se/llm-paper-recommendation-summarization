@@ -1,16 +1,20 @@
 from typing import Optional
 
-from sqlalchemy import Integer, String, ForeignKey, Table, Column
+from sqlalchemy import Integer, String, Float, ForeignKey, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
-# Association table for Config and Topic
-userconfig_followed_topic_association = Table(
-    'userconfig_followed_topic_association', Base.metadata,
-    Column('user_config_id', Integer, ForeignKey('user_config.id'), primary_key=True),
-    Column('topic_id', Integer, ForeignKey('openalex_topic.id'), primary_key=True)
-)
+
+class UserTopicAssociation(Base):
+    __tablename__ = 'userconfig_followed_topic_association'
+    user_config_id = Column(Integer, ForeignKey('user_config.id'), primary_key=True)
+    topic_id = Column(Integer, ForeignKey('openalex_topic.id'), primary_key=True)
+    relevance_score = Column(Float, nullable=False, default=0.0)
+
+    # Define relationships
+    user_config = relationship("UserConfig", back_populates="followed_topics")
+    topic = relationship("Topic")
 
 
 class User(Base):
@@ -35,5 +39,7 @@ class UserConfig(Base):
     area_of_interest_description: Mapped[Optional[str]] = mapped_column(String)
     # each config belongs to a user
     user: Mapped["User"] = relationship(back_populates="config")
-    # Many-to-Many relationship with Topic through association table
-    followed_topics: Mapped[list["Topic"]] = relationship(secondary=userconfig_followed_topic_association)
+    # Many-to-Many relationship with Topic through association class
+    followed_topics: Mapped[list["UserTopicAssociation"]] = relationship(
+        "UserTopicAssociation", back_populates="user_config"
+    )

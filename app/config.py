@@ -6,7 +6,7 @@ from sqlalchemy.exc import NoResultFound
 
 from db import Session
 from db.models import Topic
-from db.models.user import User, UserConfig
+from db.models.user import User, UserConfig, UserTopicAssociation
 from llm_interfaces import LLMInterface
 from llm_interfaces.tasks import AlignToExamplesTask
 from utils.decorator import handle_db_exceptions
@@ -29,44 +29,72 @@ def create(user_name: str, display_name: str, email: Annotated[Optional[str], ty
 
 @user_commands.command()
 @handle_db_exceptions
-def add_topic(user_name: str, topic_id: int) -> None:
+def add_topic(user_name: str, topic_id: int, relevance_score: float) -> None:
+    if not 0 <= relevance_score <= 1:
+        typer.echo("Relevance score must be between 0 and 1.")
+        raise typer.Exit(code=-1)
+
     with Session() as session:
         try:
-            user: User = session.query(User).filter(User.name == user_name).one()
+            # Retrieve the user's config
+            user_config: UserConfig = session.query(UserConfig).join(User).filter(User.name == user_name).one()
         except NoResultFound:
             typer.echo(f"User {user_name} does not exist.")
             raise typer.Exit(code=-1)
 
+        # Check if the topic exists
         topic: Topic = session.get(Topic, topic_id)
         if topic is None:
             typer.echo(f"Topic with id {topic_id} does not exist.")
             raise typer.Exit(code=-1)
 
-        user.config.followed_topics.append(topic)
+        # Check if the topic is already followed by the user
+        association_check = session.query(UserTopicAssociation).filter_by(
+            user_config_id=user_config.id,
+            topic_id=topic_id
+        ).one_or_none()
+
+        if association_check is not None:
+            typer.echo(f"User {user_name} already follows topic \"{topic.name}\" [{topic_id}].")
+            raise typer.Exit(code=-1)
+
+        # Create a new association
+        new_association = UserTopicAssociation(
+            user_config_id=user_config.id,
+            topic_id=topic_id,
+            relevance_score=relevance_score
+        )
+        session.add(new_association)
         session.commit()
-        typer.echo(f"Successfully added topic \"{topic.name}\" [{topic_id}] to {user_name}'s followed topics.")
+        typer.echo(
+            f"Successfully added topic \"{topic.name}\" [{topic_id}] with relevance score {relevance_score:.2f} to {user_name}'s followed topics.")
 
 
 @user_commands.command()
 @handle_db_exceptions
-def remove_topic(user_name: str, topic_id) -> None:
+def remove_topic(user_name: str, topic_id: int) -> None:
     with Session() as session:
         try:
-            user: User = session.query(User).filter(User.name == user_name).one()
+            # Retrieve the user and their config
+            user_config: UserConfig = session.query(UserConfig).join(User).filter(User.name == user_name).one()
         except NoResultFound:
             typer.echo(f"User {user_name} does not exist.")
             raise typer.Exit(code=-1)
 
-        topic: Topic = session.get(Topic, topic_id)
-        if topic is None:
-            typer.echo(f"Topic with id {topic_id} does not exist.")
+        # Retrieve the association instance between user_config and the topic
+        association = session.query(UserTopicAssociation).filter_by(
+            user_config_id=user_config.id,
+            topic_id=topic_id
+        ).one_or_none()
+
+        if association is None:
+            typer.echo(f"Topic with id {topic_id} is not followed by {user_name}.")
             raise typer.Exit(code=-1)
-        if not topic in user.config.followed_topics:
-            typer.echo(f"Error: User {user_name} does not follow topic \"{topic.name}\" [{topic_id}].")
-            raise typer.Exit(code=-1)
-        user.config.followed_topics.remove(topic)
+
+        # Remove the association
+        session.delete(association)
         session.commit()
-        typer.echo(f"Successfully removed topic \"{topic.name}\" [{topic_id}] from {user_name}'s followed topics.")
+        typer.echo(f"Successfully removed topic {topic_id} from {user_name}'s followed topics.")
 
 
 @user_commands.command()
@@ -74,18 +102,20 @@ def remove_topic(user_name: str, topic_id) -> None:
 def followed_topics(user_name: str) -> None:
     with Session() as session:
         try:
-            user: User = session.query(User).filter(User.name == user_name).one()
+            user_config: UserConfig = session.query(UserConfig).join(User).filter(User.name == user_name).one()
         except NoResultFound:
             typer.echo(f"User {user_name} does not exist.")
             raise typer.Exit(code=-1)
 
-        topics = user.config.followed_topics
-        if len(topics) == 0:
+        followed_topics_associations = user_config.followed_topics
+        if len(followed_topics_associations) == 0:
             typer.echo(f"User {user_name} does not follow any topics.")
         else:
             typer.echo(f"User {user_name} follows these topics:")
-            for topic in topics:
-                typer.echo(f"Id: {topic.id} Name: {topic.name}")
+            for association in followed_topics_associations:
+                # Display both topic details and relevance score
+                typer.echo(
+                    f"Id: {association.topic.id}, Name: {association.topic.name}, Relevance Score: {association.relevance_score:.2f}")
 
 
 @user_commands.command()
@@ -115,7 +145,9 @@ def set_area_of_interest(
             typer.echo(f"Id: {topic.id} | Name: {topic.name} | Score: {score:.2f}")
         typer.echo()
         user.config.area_of_interest_description = area_of_interest_description
-        user.config.followed_topics = topics
+        user.config.followed_topics = [
+            UserTopicAssociation(topic=topic, relevance_score=score) for topic, score in zip(topics, scores)
+        ]
 
         session.commit()
         typer.echo(f"Successfully added these topics to the list of topics followed by user {user_name}.")
