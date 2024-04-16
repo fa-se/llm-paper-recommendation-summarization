@@ -1,14 +1,15 @@
 import logging
 
+from data_classes import ScoredWork
 from open_alex_interface import Work
 
 logger = logging.getLogger(__name__)
 
 
 def compute_relevance_scores_by_topics(
-        works: list[Work], topics: list[int], topics_user_relevances: list[float]
-) -> list[float]:
-    relevance_scores = []
+    works: list[Work], topics: list[int], topics_user_relevances: list[float]
+) -> list[ScoredWork]:
+    scored_works: list[ScoredWork] = []
 
     for work in works:
         score = 0
@@ -20,11 +21,12 @@ def compute_relevance_scores_by_topics(
                 if topic_score == topic_id:
                     topic_score = float("-inf")
                 # topic_score -> how well does this work match the topic | user_relevance -> how relevant is this topic for the user
-                score += (topic_score * user_relevance)
+                score += topic_score * user_relevance
         # Normalize by number of maximum possible matches
         score = score / (min(len(topics), len(work.topics)))
-        relevance_scores.append(score)
         if score == float("-inf"):
             logger.info(f"Ignoring invalid topic score for work {work}")
+        else:
+            scored_works.append(ScoredWork(work, score))
 
-    return relevance_scores
+    return scored_works
