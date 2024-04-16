@@ -58,5 +58,10 @@ class LLMInterface:
     def create_embedding(self, text: str, config: dict = None) -> list[float]:
         raise NotImplementedError
 
+    def create_embedding_batch(
+        self, texts: list[str], config: dict = None
+    ) -> list[list[float]]:
+        raise NotImplementedError
+
     def handle_task(self, task: Task) -> str:
         raise NotImplementedError
