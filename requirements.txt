@@ -1,6 +1,7 @@
 typer[all]
 pyalex
 openai
+tiktoken
 psycopg[binary,pool]
 sqlalchemy
 pgvector
