@@ -1,20 +1,24 @@
 from typing import Optional
 
-from sqlalchemy import Integer, String, Float, ForeignKey, Column
+from sqlalchemy import Integer, String, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
 
 class UserTopicAssociation(Base):
-    __tablename__ = 'userconfig_followed_topic_association'
-    user_config_id = Column(Integer, ForeignKey('user_config.id'), primary_key=True)
-    topic_id = Column(Integer, ForeignKey('openalex_topic.id'), primary_key=True)
-    relevance_score = Column(Float, nullable=False, default=0.0)
+    __tablename__ = "userconfig_followed_topic_association"
+    user_config_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user_config.id"), primary_key=True
+    )
+    topic_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("openalex_topic.id"), primary_key=True
+    )
+    relevance_score: Mapped[float] = mapped_column(Float, nullable=False)
 
     # Define relationships
-    user_config = relationship("UserConfig", back_populates="followed_topics")
-    topic = relationship("Topic")
+    user_config: Mapped["UserConfig"] = relationship(back_populates="followed_topics")
+    topic: Mapped["Topic"] = relationship()
 
 
 class User(Base):
@@ -41,5 +45,9 @@ class UserConfig(Base):
     user: Mapped["User"] = relationship(back_populates="config")
     # Many-to-Many relationship with Topic through association class
     followed_topics: Mapped[list["UserTopicAssociation"]] = relationship(
-        "UserTopicAssociation", back_populates="user_config"
+        back_populates="user_config"
+    )
+    # Relationship to track publications
+    scored_publications: Mapped[list["UserConfigPublicationAssociation"]] = (
+        relationship(back_populates="user_config")
     )
