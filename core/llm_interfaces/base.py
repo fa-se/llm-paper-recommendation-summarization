@@ -28,6 +28,7 @@ class Message:
         return Message(self.role, self.content.format(**kwargs))
 
 
+# TODO: maybe use Abstract Base Classes (ABC)
 class Task:
     """
     Base class that encapsulates a task to be handled by an LLM interface.

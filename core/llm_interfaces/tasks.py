@@ -1,4 +1,4 @@
-from llm_interfaces.base import LLMType, Message, Task
+from .base import LLMType, Message, Task
 
 
 class AlignToExamplesTask(Task):
@@ -6,15 +6,18 @@ class AlignToExamplesTask(Task):
     Task to align the input to match the structure of the provided example(s).
     Example use case: Rewrite user provided text to improve embedding similarity search by matching the structure used to generate the embeddings.
     """
+
     prompt_templates = {
         LLMType.GPT: {
-            "system": Message("system",
-                              "You will be provided with a free form text for which embeddings will be created at a later stage. "
-                              "In order to improve embedding similarity search, the input needs to be aligned with the input used "
-                              "to generate the embeddings. Your task is to align the input to the structure of the following examples, "
-                              "while preserving its meaning. In your answers, respond only with the resulting aligned text.\n\n"
-                              "{examples}"),
-            "user": Message("user", "{input_text}")
+            "system": Message(
+                "system",
+                "You will be provided with a free form text for which embeddings will be created at a later stage. "
+                "In order to improve embedding similarity search, the input needs to be aligned with the input used "
+                "to generate the embeddings. Your task is to align the input to the structure of the following examples, "
+                "while preserving its meaning. In your answers, respond only with the resulting aligned text.\n\n"
+                "{examples}",
+            ),
+            "user": Message("user", "{input_text}"),
         }
     }
 

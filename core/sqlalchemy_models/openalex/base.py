@@ -2,7 +2,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import Integer, String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
-from db.models import Base
+from .. import Base
 
 
 class OpenAlexBase(Base):
