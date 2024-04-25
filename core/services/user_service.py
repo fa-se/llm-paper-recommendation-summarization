@@ -59,14 +59,14 @@ class UserService:
         return user_config.followed_topics
 
     def set_area_of_interest(
-        self, user_name: str, area_of_interest_description: str, align_description: bool = True
+        self, user_name: str, area_of_interest_description: str, align_description: bool = True, n_topics: int = 5
     ) -> tuple[list[UserConfigTopicAssociation], str]:
         user = self.user_repository.get_by_name(user_name)
         if not user:
             raise ValueError(f"User {user_name} does not exist.")
 
         topics, similarities, area_of_interest_description = self._get_matching_topics_for_area_of_interest(
-            area_of_interest_description, align_description
+            area_of_interest_description, align_description, n_topics
         )
 
         user_config = self.user_repository.create_new_config_version(user)
@@ -80,7 +80,7 @@ class UserService:
         return user_config.followed_topics, area_of_interest_description
 
     def _get_matching_topics_for_area_of_interest(
-        self, area_of_interest_description: str, align_description: bool = True
+        self, area_of_interest_description: str, align_description: bool, n_topics: int
     ) -> tuple[list[Topic], list[float], str]:
         task = AlignToExamplesTask(
             area_of_interest_description,
@@ -94,9 +94,7 @@ class UserService:
             area_of_interest_description = self.llm_interface.handle_task(task)
 
         query_embedding = self.llm_interface.create_embedding(area_of_interest_description)
-        topics, similarities = self.topic_repository.get_topics_by_embedding_similarity(
-            query_embedding, top_n=5
-        )  # TODO: make top_n configurable
+        topics, similarities = self.topic_repository.get_topics_by_embedding_similarity(query_embedding, top_n=n_topics)
         return topics, similarities, area_of_interest_description
 
     def area_of_interest_description(self, user_name: str) -> str:

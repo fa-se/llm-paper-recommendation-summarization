@@ -63,10 +63,13 @@ def set_area_of_interest(
         "--no-align",
         help="Don't rewrite the description to improve topic matching.",
     ),
+    n_topics: Annotated[int, typer.Argument(..., help="The number of topics to follow based on the description.")] = 5,
 ) -> None:
     align = not dont_align  # Flip the value, because the feature should be enabled by default
     user_service: UserService = context.obj.user_service
-    topic_associations, description = user_service.set_area_of_interest(user_name, area_of_interest_description, align)
+    topic_associations, description = user_service.set_area_of_interest(
+        user_name, area_of_interest_description, align, n_topics
+    )
 
     typer.echo(f"Successfully set the area of interest for user {user_name}.")
     if align:
