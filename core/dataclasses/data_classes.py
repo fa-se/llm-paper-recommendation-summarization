@@ -35,8 +35,11 @@ class Work:
             tzinfo=datetime.timezone.utc
         )
 
+    def openalex_url(self) -> str:
+        return f"https://openalex.org/W{self.id}"
+
     def __str__(self) -> str:
-        return f"'{self.title}' by [{', '.join(self.authors)}] ({self.id})"
+        return f"'{self.title}' by [{', '.join(self.authors)}] ({self.openalex_url()})"
 
 
 @total_ordering
