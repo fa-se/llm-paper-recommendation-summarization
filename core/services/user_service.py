@@ -82,15 +82,15 @@ class UserService:
     def _get_matching_topics_for_area_of_interest(
         self, area_of_interest_description: str, align_description: bool, n_topics: int
     ) -> tuple[list[Topic], list[float], str]:
-        task = AlignToExamplesTask(
-            area_of_interest_description,
-            [
-                "This cluster of papers focuses on research related to ad hoc wireless networks, including topics such as routing protocols, mobile ad hoc networks, security, multi-hop wireless routing, and mobility models. It covers various aspects of network capacity, performance analysis, and optimization techniques for ad hoc wireless communication. Additionally, it explores challenges and solutions in areas like interference management, topology control, and channel assignment in wireless mesh networks.",
-                "This cluster of papers focuses on the resilience of coral reef ecosystems to the impacts of climate change, including ocean acidification, bleaching, and disease. It explores the role of marine reserves, symbiotic dinoflagellates, and population connectivity in maintaining the health and biodiversity of coral reefs. The cluster also addresses the importance of the coral microbiome and the potential effects of nutrient pollution on coral reef ecosystems.",
-                "This cluster of papers explores the impact of social media, particularly Facebook and online communication, on well-being, addictive behavior, and psychological effects, especially among adolescents. It delves into the concept of digital natives, examines the addictive nature of social media use, and investigates the relationship between social media use and various psychological outcomes.",
-            ],
-        )
         if align_description:
+            task = AlignToExamplesTask(
+                area_of_interest_description,
+                [
+                    "This cluster of papers focuses on research related to ad hoc wireless networks, including topics such as routing protocols, mobile ad hoc networks, security, multi-hop wireless routing, and mobility models. It covers various aspects of network capacity, performance analysis, and optimization techniques for ad hoc wireless communication. Additionally, it explores challenges and solutions in areas like interference management, topology control, and channel assignment in wireless mesh networks.",
+                    "This cluster of papers focuses on the resilience of coral reef ecosystems to the impacts of climate change, including ocean acidification, bleaching, and disease. It explores the role of marine reserves, symbiotic dinoflagellates, and population connectivity in maintaining the health and biodiversity of coral reefs. The cluster also addresses the importance of the coral microbiome and the potential effects of nutrient pollution on coral reef ecosystems.",
+                    "This cluster of papers explores the impact of social media, particularly Facebook and online communication, on well-being, addictive behavior, and psychological effects, especially among adolescents. It delves into the concept of digital natives, examines the addictive nature of social media use, and investigates the relationship between social media use and various psychological outcomes.",
+                ],
+            )
             area_of_interest_description = self.llm_interface.handle_task(task)
 
         query_embedding = self.llm_interface.create_embedding(area_of_interest_description)
