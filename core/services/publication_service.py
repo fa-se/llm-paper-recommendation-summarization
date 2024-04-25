@@ -5,8 +5,9 @@ from os import environ
 
 import pyalex
 
-from core.dataclasses.data_classes import Work, ScoredWork
+from core.dataclasses.data_classes import Work, ScoredWork, SummarizedWork
 from core.llm_interfaces import LLMInterface
+from core.llm_interfaces.tasks import CustomizedSummaryTask
 from core.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
@@ -90,3 +91,21 @@ class PublicationService:
             scored_works.append(ScoredWork(work, score))
 
         return scored_works
+
+    def summarize_works_for_user(self, user_name: str, works: list[Work]) -> list[SummarizedWork]:
+        area_of_interest_description = self.user_service.area_of_interest_description(user_name)
+
+        # only consider works with abstracts
+        works_with_abstracts = [work for work in works if work.abstract]
+
+        summarized_works: list[SummarizedWork] = []
+        for work in works_with_abstracts:
+            task = CustomizedSummaryTask(
+                area_of_research=area_of_interest_description,
+                abstract=work.abstract,
+                prioritize_quality=True,
+            )
+            summary = self.llm_interface.handle_task(task)
+            summarized_works.append(SummarizedWork(work, summary))
+
+        return summarized_works

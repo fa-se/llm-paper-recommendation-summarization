@@ -35,3 +35,11 @@ def rate_all_published_after(context: typer.Context, user_name: str, date: datet
     typer.echo("\nThe 10 most relevant works are:")
     for scored_work in scored_works[:10]:
         typer.echo(scored_work)
+
+    typer.echo("\nSummarizing the 3 most relevant works...")
+    # extract the top 3 works
+    most_relevant_works = [scored_work.work for scored_work in scored_works[:3]]
+    summarized_works = publication_service.summarize_works_for_user(user_name, most_relevant_works)
+    typer.echo("Summaries:")
+    for summarized_work in summarized_works:
+        typer.echo("[" + summarized_work.__str__() + ";]\n")

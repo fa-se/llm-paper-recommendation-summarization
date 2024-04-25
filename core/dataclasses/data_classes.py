@@ -66,3 +66,12 @@ class ScoredWork:
 
     def __lt__(self, other: Self):
         return self.score < other.score
+
+
+class SummarizedWork:
+    def __init__(self, work: Work, summary: str):
+        self.work = work
+        self.summary = summary
+
+    def __str__(self) -> str:
+        return f"{self.work.title}\nSummary: {self.summary}"
