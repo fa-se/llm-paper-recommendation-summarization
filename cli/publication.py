@@ -22,12 +22,12 @@ def rate_all_published_after(context: typer.Context, user_name: str, date: datet
     topic_ids = [topic.topic_id for topic in topics]
 
     typer.echo(f"Getting works published after {date}...")
-    works: list[Work] = publication_service.get_works_by_topics(topic_ids, published_after=date)
-    typer.echo(f"Found {len(works)} works.")
+    works: list[Work] = publication_service.get_works_by_topics(topic_ids, published_after=date, require_abstract=True)
+    typer.echo(f"Found {len(works)} works. Works without abstract are ignored.")
 
     typer.echo("Proceeding with scoring by embedding similarity...")
     scored_works = publication_service.compute_relevance_score_by_embedding_similarity(user_name, works)
-    typer.echo(f"Scored {len(scored_works)} works. Works without abstracts are ignored.")
+    typer.echo(f"Scored {len(scored_works)} works.")
 
     # sort rated works by score
     scored_works.sort(reverse=True)

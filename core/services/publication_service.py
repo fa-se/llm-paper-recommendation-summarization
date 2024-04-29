@@ -19,7 +19,9 @@ class PublicationService:
         self.user_service = user_service
         self.llm_interface = llm_interface
 
-    def get_works_by_topics(self, topic_ids: [int], published_after: datetime.date, n_max: int = 2000) -> list[Work]:
+    def get_works_by_topics(
+        self, topic_ids: [int], published_after: datetime.date, require_abstract=True, n_max: int = 2000
+    ) -> list[Work]:
         topic_filter_str = "|".join(f"T{str(topic_id)}" for topic_id in topic_ids)
         # ISO 8601 date format
         from_publication_date_str = published_after.strftime("%Y-%m-%d")
@@ -31,6 +33,8 @@ class PublicationService:
             .filter(from_publication_date=from_publication_date_str)
             .filter(to_publication_date=to_publication_date_str)
         )
+        if require_abstract:
+            query = query.filter(has_abstract=True)
 
         logger.info(
             f"Querying OpenAlex for works with topics {topic_ids} published after {published_after} (n_max={n_max}) Query URL: {query.url}"
@@ -81,6 +85,8 @@ class PublicationService:
         for work in works:
             if work.abstract:
                 abstracts.append(work.abstract)
+            else:
+                raise ValueError(f"Work {work} has no abstract, but the abstract is required for scoring.")
 
         embeddings = self.llm_interface.create_embedding_batch(abstracts)
 
