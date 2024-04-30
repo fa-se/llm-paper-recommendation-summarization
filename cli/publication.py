@@ -13,7 +13,17 @@ publication_commands = typer.Typer()
 
 
 @publication_commands.command()
-@handle_db_exceptions
+@handle_db_exceptions  # TODO: this shouldn't be necessary anymore and be handled in the services / repositories
+def initialize(context: typer.Context, user_name: str, start_date: datetime.datetime) -> None:
+    user_service: UserService = context.obj.user_service
+    publication_service: PublicationService = context.obj.publication_service
+
+    typer.echo(f"Initializing publications for user {user_name} starting from {start_date}...")
+    added_works = publication_service.initialize_for_user(user_name, start_date)
+    typer.echo(f"Added {len(added_works)} works. Works that have been seen before are ignored.")
+
+
+@publication_commands.command()
 def rate_all_published_after(context: typer.Context, user_name: str, date: datetime.datetime) -> None:
     user_service: UserService = context.obj.user_service
     publication_service: PublicationService = context.obj.publication_service

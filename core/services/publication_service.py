@@ -8,14 +8,19 @@ import pyalex
 from core.dataclasses.data_classes import Work, ScoredWork, SummarizedWork
 from core.llm_interfaces import LLMInterface
 from core.llm_interfaces.tasks import CustomizedSummaryTask
+from core.repositories.publication_repository import PublicationRepository
 from core.services.user_service import UserService
+from core.sqlalchemy_models import UserConfigTopicAssociation
 
 logger = logging.getLogger(__name__)
 pyalex.config.email = environ.get("OPENALEX_CONTACT_EMAIL")
 
 
 class PublicationService:
-    def __init__(self, user_service: UserService, llm_interface: LLMInterface):
+    def __init__(
+        self, publication_repository: PublicationRepository, user_service: UserService, llm_interface: LLMInterface
+    ):
+        self.publication_repository = publication_repository
         self.user_service = user_service
         self.llm_interface = llm_interface
 
@@ -27,6 +32,8 @@ class PublicationService:
         from_publication_date_str = published_after.strftime("%Y-%m-%d")
         to_publication_date_str = datetime.datetime.now().strftime("%Y-%m-%d")
 
+        no_limit = n_max == -1
+
         query = (
             pyalex.Works()
             .filter(primary_topic={"id": topic_filter_str})
@@ -37,12 +44,14 @@ class PublicationService:
             query = query.filter(has_abstract=True)
 
         logger.info(
-            f"Querying OpenAlex for works with topics {topic_ids} published after {published_after} (n_max={n_max}) Query URL: {query.url}"
+            f"Querying OpenAlex for works with topics {topic_ids} published after {published_after} (n_max={n_max if not no_limit else "unlimited"}) Query URL: {query.url}"
         )
 
         works = []
-        for pyalex_work in chain(*query.paginate(per_page=200, n_max=n_max)):
+        for pyalex_work in chain(*query.paginate(per_page=200, n_max=(n_max if not no_limit else None))):
+            # don't return works without title
             works.append(Work(pyalex_work))
+        logger.info(f"Found {len(works)} works.")
 
         return works
 
@@ -115,3 +124,48 @@ class PublicationService:
             summarized_works.append(SummarizedWork(work, summary))
 
         return summarized_works
+
+    # Fetches all potentially relevant works for a user published after a certain date, embeds the abstracts and stores them in the database
+    # Does not yet score publications
+    def initialize_for_user(self, user_name: str, start_date: datetime.datetime) -> list[Work]:
+        topics: list[UserConfigTopicAssociation] = self.user_service.followed_topics(user_name)
+        topic_ids = [topic.topic_id for topic in topics]
+
+        works = self.get_works_by_topics(topic_ids, start_date, require_abstract=True, n_max=-1)
+        access_timestamp = datetime.datetime.now()
+
+        # skip works that have already been embedded
+        known_works = self.publication_repository.get_all_openalex_ids()
+        works_to_be_added = [work for work in works if work.id not in known_works]
+
+        logger.info(
+            f"Embedding {len(works_to_be_added)} works for user {user_name}. {len(works) - len(works_to_be_added)} works were already present."
+        )
+        # embed abstracts
+        abstracts = []
+        for work in works_to_be_added:
+            if work.abstract:
+                abstracts.append(work.abstract)
+            else:
+                raise ValueError(f"Work {work} has no abstract, but the abstract is required for embedding.")
+
+        # TODO: Batch here (2000) to reduce memory consumption and to save intermediate results
+        works_processed = 0
+        for i in range(0, len(works_to_be_added), 2000):
+            embeddings = self.llm_interface.create_embedding_batch(abstracts[i : i + 2000])
+            for work, embedding in zip(works_to_be_added[i : i + 2000], embeddings):
+                # TODO: Consistent naming? Work or Publication?
+                self.publication_repository.create(
+                    openalex_id=work.id,
+                    title=work.title,
+                    authors=work.authors,
+                    published=work.publication_date,
+                    accessed=access_timestamp,
+                    embedding=embedding,
+                )
+            self.publication_repository.commit()
+            works_processed += len(embeddings)
+            logger.info(f"Progress: {works_processed} out of {len(works_to_be_added)} works embedded.")
+
+        logger.info(f"Finished initialization for user {user_name}. Added {len(works_to_be_added)} works.")
+        return works_to_be_added

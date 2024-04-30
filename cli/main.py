@@ -6,6 +6,7 @@ import typer
 
 from core.llm_interfaces import OpenAIInterface, LLMInterface
 from core.repositories import UserRepository, TopicRepository
+from core.repositories.publication_repository import PublicationRepository
 from core.services.publication_service import PublicationService
 from core.services.user_service import UserService
 from db import Session
@@ -32,7 +33,7 @@ class Services:
             topic_repository=TopicRepository(session),
             llm_interface=llm_interface,
         )
-        self.publication_service = PublicationService(self.user_service, llm_interface)
+        self.publication_service = PublicationService(PublicationRepository(session), self.user_service, llm_interface)
 
 
 def setup_logging(is_cli: bool = False) -> None:
