@@ -34,11 +34,7 @@ class OpenAIInterface(LLMInterface):
 
     def handle_task(self, task: Task) -> str:
         messages = task.get_prompt(LLMType.GPT)
-        model = (
-            self.defaults["quality_model"]
-            if task.prioritize_quality
-            else self.defaults["budget_model"]
-        )
+        model = self.defaults["quality_model"] if task.prioritize_quality else self.defaults["budget_model"]
         completion = self.create_completion(messages=messages, model=model)
 
         return completion
@@ -65,9 +61,7 @@ class OpenAIInterface(LLMInterface):
 
         return response.data[0].embedding
 
-    def create_embedding_batch(
-        self, texts: list[str], config: dict = None
-    ) -> list[list[float]]:
+    def create_embedding_batch(self, texts: list[str], config: dict = None) -> list[list[float]]:
         if config is None:
             config = {}
         # merge provided config with defaults
@@ -81,12 +75,16 @@ class OpenAIInterface(LLMInterface):
         current_batch_tokens = 0
         tiktoken_encoding = (
             "cl100k_base"
-            if config["embedding_model"]
-            in ["text-embedding-3-large", "text-embedding-3-small"]
+            if config["embedding_model"] in ["text-embedding-3-large", "text-embedding-3-small"]
             else "cl100k_base"
         )
         for text in texts:
             num_tokens = num_tokens_from_string(text, tiktoken_encoding)
+            if num_tokens > max_tokens_per_batch:
+                # TODO: How to handle this case? For now, add ' ' to batch, '' fails
+                current_batch.append(" ")
+                continue
+
             if current_batch_tokens + num_tokens > max_tokens_per_batch:
                 batches.append(current_batch)
                 current_batch = []
@@ -123,20 +121,14 @@ class OpenAIInterface(LLMInterface):
         for message in messages:
             # Due to ChatCompletionMessageParam being a union, we need to check the role and instantiate the correct type
             if message.role == "system":
-                message_param = ChatCompletionSystemMessageParam(
-                    role=message.role, content=message.content
-                )
+                message_param = ChatCompletionSystemMessageParam(role=message.role, content=message.content)
             elif message.role == "user":
-                message_param = ChatCompletionUserMessageParam(
-                    role=message.role, content=message.content
-                )
+                message_param = ChatCompletionUserMessageParam(role=message.role, content=message.content)
             else:
                 raise ValueError(f"Unsupported message role: {message.role}")
             completion_messages.append(message_param)
 
-        response = self.client.chat.completions.create(
-            messages=completion_messages, model=model
-        )
+        response = self.client.chat.completions.create(messages=completion_messages, model=model)
 
         used_tokens = response.usage.total_tokens
         cost = used_tokens * self.model_to_cost_per_token[model]
