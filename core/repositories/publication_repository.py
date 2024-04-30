@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from sqlalchemy import select, desc
+
 from core.sqlalchemy_models import Publication
 from db import Session
 
@@ -34,3 +36,19 @@ class PublicationRepository:
     def get_all_openalex_ids(self) -> list[int]:
         results = self.session.query(Publication.openalex_id).all()
         return [result[0] for result in results]
+
+    def get_openalex_ids_by_embedding_similarity(
+        self, embedding: list[float], top_n: int
+    ) -> tuple[list[int], list[float]]:
+        # Query to find the n most similar topics with similarity score (cosine similarity)
+        query = (
+            select(Publication.openalex_id, (1 - Publication.embedding.cosine_distance(embedding)).label("similarity"))
+            .order_by(desc("similarity"))
+            .limit(top_n)
+        )
+        results = self.session.execute(query).all()
+
+        ids = [result.openalex_id for result in results]
+        similarities = [result.similarity for result in results]
+
+        return ids, similarities
