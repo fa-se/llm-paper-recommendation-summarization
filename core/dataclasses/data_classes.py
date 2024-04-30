@@ -7,18 +7,18 @@ import pyalex
 
 class Work:
     def __init__(self, pyalex_work: pyalex.Work):
-        self.id = int(
+        self.id: int = int(
             pyalex_work["ids"]["openalex"].split("W")[-1]
         )  # OpenAlex returns ids as URL in the form 'https://openalex.org/W12345'
-        self.title = pyalex_work["title"]
+        self.title: str = pyalex_work["title"]
         # First three authors for now
-        self.authors = [author["author"]["display_name"] for author in pyalex_work["authorships"][:3]]
+        self.authors: list[str] = [author["author"]["display_name"] for author in pyalex_work["authorships"][:3]]
         # Pyalex overrides __getitem__ to reconstruct the abstract from the inverted index on the fly.
         # Calling pyalex_work.get would circumvent that custom logic and return None, even if an abstract is present.
         # For that reason, we need to check if abstract_inverted_index exists.
-        self.abstract = pyalex_work["abstract"] if pyalex_work["abstract_inverted_index"] else None
+        self.abstract: str = pyalex_work["abstract"] if pyalex_work["abstract_inverted_index"] else None
 
-        self.topics = {}
+        self.topics: dict = {}
         for topic in pyalex_work["topics"]:
             topic_id = int(
                 topic["id"].split("T")[-1]
@@ -28,10 +28,10 @@ class Work:
                 "score": topic["score"],
             }
         # Pyalex returns dates as ISO 8601 strings (e.g. "2017-08-08"), we want to store them as UTC datetime objects
-        self.publication_date = datetime.datetime.fromisoformat(pyalex_work["publication_date"]).replace(
-            tzinfo=datetime.timezone.utc
-        )
-        self.created_date = datetime.datetime.fromisoformat(pyalex_work["created_date"]).replace(
+        self.publication_date: datetime.datetime = datetime.datetime.fromisoformat(
+            pyalex_work["publication_date"]
+        ).replace(tzinfo=datetime.timezone.utc)
+        self.created_date: datetime.datetime = datetime.datetime.fromisoformat(pyalex_work["created_date"]).replace(
             tzinfo=datetime.timezone.utc
         )
 
@@ -45,8 +45,8 @@ class Work:
 @total_ordering
 class ScoredWork:
     def __init__(self, work: Work, score: float):
-        self.work = work
-        self.score = score
+        self.work: Work = work
+        self.score: float = score
 
     @property
     def score(self) -> float:
@@ -70,8 +70,8 @@ class ScoredWork:
 
 class SummarizedWork:
     def __init__(self, work: Work, summary: str):
-        self.work = work
-        self.summary = summary
+        self.work: Work = work
+        self.summary: str = summary
 
     def __str__(self) -> str:
         return f"{self.work.title}\nSummary: {self.summary}"
