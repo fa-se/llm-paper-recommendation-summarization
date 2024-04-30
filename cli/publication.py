@@ -1,4 +1,5 @@
 import datetime
+from typing import Annotated, Optional
 
 import typer
 
@@ -21,6 +22,31 @@ def initialize(context: typer.Context, user_name: str, start_date: datetime.date
     typer.echo(f"Initializing publications for user {user_name} starting from {start_date}...")
     added_works = publication_service.initialize_for_user(user_name, start_date)
     typer.echo(f"Added {len(added_works)} works. Works that have been seen before are ignored.")
+
+
+@publication_commands.command()
+def most_relevant(
+    context: typer.Context,
+    user_name: str,
+    n: Annotated[int, typer.Argument()] = 10,
+    start_date: Annotated[Optional[datetime.datetime], typer.Argument] = None,
+) -> None:
+    publication_service: PublicationService = context.obj.publication_service
+
+    typer.echo(f"Getting the {n} most relevant works for user {user_name}...")
+    scored_works = publication_service.get_most_relevant_works_by_embedding(user_name, n, start_date)
+    for scored_work in scored_works:
+        typer.echo(scored_work)
+
+
+@publication_commands.command()
+def summarize(context: typer.Context, user_name: str, openalex_id: str) -> None:
+    publication_service: PublicationService = context.obj.publication_service
+
+    work = publication_service.get_work_by_openalex_id(openalex_id)
+    summarized_work = publication_service.summarize_works_for_user(user_name, [work])[0]
+    typer.echo(f"Summary for work {summarized_work.work}:")
+    typer.echo(summarized_work.summary)
 
 
 @publication_commands.command()

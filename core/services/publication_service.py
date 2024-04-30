@@ -169,3 +169,30 @@ class PublicationService:
 
         logger.info(f"Finished initialization for user {user_name}. Added {len(works_to_be_added)} works.")
         return works_to_be_added
+
+    def get_most_relevant_works_by_embedding(
+        self, user_name: str, n: int, start_date: datetime.datetime = None
+    ) -> list[ScoredWork]:
+        # get user embedding
+        area_of_interest_description = self.user_service.area_of_interest_description(user_name)
+        area_of_interest_embedding = self.llm_interface.create_embedding(area_of_interest_description)
+
+        work_ids, similarities = self.publication_repository.get_openalex_ids_by_embedding_similarity(
+            area_of_interest_embedding, n
+        )
+        id_filter_string = "|".join(f"W{str(work_id)}" for work_id in work_ids)
+        # fetch works from OpenAlex
+        query = pyalex.Works().filter(openalex=id_filter_string)
+        if start_date is not None:
+            query = query.filter(from_publication_date=start_date.strftime("%Y-%m-%d"))
+
+        scored_works = []
+        for idx, pyalex_work in enumerate(chain(*query.paginate(per_page=200, n_max=None))):
+            work = Work(pyalex_work)
+            scored_works.append(ScoredWork(work, similarities[idx]))
+
+        return scored_works
+
+    def get_work_by_openalex_id(self, openalex_id: str) -> Work:
+        pyalex_work = pyalex.Works()[openalex_id]
+        return Work(pyalex_work)
