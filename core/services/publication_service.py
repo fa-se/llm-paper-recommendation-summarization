@@ -178,14 +178,11 @@ class PublicationService:
         area_of_interest_embedding = self.llm_interface.create_embedding(area_of_interest_description)
 
         work_ids, similarities = self.publication_repository.get_openalex_ids_by_embedding_similarity(
-            area_of_interest_embedding, n
+            area_of_interest_embedding, n, start_date
         )
         id_filter_string = "|".join(f"W{str(work_id)}" for work_id in work_ids)
         # fetch works from OpenAlex
         query = pyalex.Works().filter(openalex=id_filter_string)
-        if start_date is not None:
-            query = query.filter(from_publication_date=start_date.strftime("%Y-%m-%d"))
-
         scored_works = []
         for idx, pyalex_work in enumerate(chain(*query.paginate(per_page=200, n_max=None))):
             work = Work(pyalex_work)
