@@ -34,12 +34,13 @@ class Work:
         self.created_date: datetime.datetime = datetime.datetime.fromisoformat(pyalex_work["created_date"]).replace(
             tzinfo=datetime.timezone.utc
         )
+        self.cited_by_count = pyalex_work["cited_by_count"]
 
     def openalex_url(self) -> str:
         return f"https://openalex.org/W{self.id}"
 
     def __str__(self) -> str:
-        return f"'{self.title}' by [{', '.join(self.authors)}] ({self.openalex_url()})"
+        return f"'{self.title}' by [{', '.join(self.authors)}] ({self.publication_date:%Y-%m}) | # cited by: {self.cited_by_count} | {self.openalex_url()}"
 
 
 @total_ordering
@@ -59,7 +60,7 @@ class ScoredWork:
         self._score = value
 
     def __str__(self) -> str:
-        return f"Score: {self.score} - {self.work}"
+        return f"Score: {self.score:.2f} - {self.work}"
 
     def __eq__(self, other: Self):
         return self.score == other.score
