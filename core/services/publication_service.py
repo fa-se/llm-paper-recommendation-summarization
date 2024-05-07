@@ -180,16 +180,29 @@ class PublicationService:
         work_ids, similarities = self.publication_repository.get_openalex_ids_by_embedding_similarity(
             area_of_interest_embedding, n, start_date
         )
-        id_filter_string = "|".join(f"W{str(work_id)}" for work_id in work_ids)
-        # fetch works from OpenAlex
-        query = pyalex.Works().filter(openalex=id_filter_string)
-        scored_works = []
-        for idx, pyalex_work in enumerate(chain(*query.paginate(per_page=200, n_max=None))):
-            work = Work(pyalex_work)
-            scored_works.append(ScoredWork(work, similarities[idx]))
+        works = self.get_works_by_openalex_ids(work_ids)
+        scored_works = [ScoredWork(work, similarity) for work, similarity in zip(works, similarities)]
 
         return scored_works
 
     def get_work_by_openalex_id(self, openalex_id: str) -> Work:
         pyalex_work = pyalex.Works()[openalex_id]
         return Work(pyalex_work)
+
+    def get_works_by_openalex_ids(self, openalex_ids: list[str] | list[int]) -> list[Work]:
+        if not openalex_ids:
+            return []
+        # copy list to avoid modifying the original list
+        ids = list(openalex_ids)
+        # if the ids are integers, convert them to the OpenAlex format by prepending "W"
+        if isinstance(ids[0], int):
+            ids = [f"W{str(work_id)}" for work_id in openalex_ids]
+
+        query = pyalex.Works().filter(openalex="|".join(ids))
+        works = []
+        for pyalex_work in chain(*query.paginate(per_page=200, n_max=None)):
+            works.append(Work(pyalex_work))
+
+        # because the API returns works in an arbitrary order, we need to restore the original order
+        works = sorted(works, key=lambda work: openalex_ids.index(work.id))
+        return works
