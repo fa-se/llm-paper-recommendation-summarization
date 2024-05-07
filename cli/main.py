@@ -40,7 +40,7 @@ def setup_logging(is_cli: bool = False) -> None:
     filename = "app.log"
     filemode = "a"
     fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    level = logging.DEBUG if os.getenv("DEBUG") else logging.INFO
+    level = logging.DEBUG if os.getenv("DEBUG") == "1" else logging.INFO
     logging.basicConfig(level=level, format=fmt, filename=filename, filemode=filemode, force=True)
 
 
