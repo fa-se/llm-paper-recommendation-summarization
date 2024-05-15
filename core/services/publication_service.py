@@ -170,15 +170,17 @@ class PublicationService:
         logger.info(f"Finished initialization for user {user_name}. Added {len(works_to_be_added)} works.")
         return works_to_be_added
 
-    def get_most_relevant_works_by_embedding(
+    def get_relevant_works_for_user(
         self, user_name: str, n: int, start_date: datetime.datetime = None
     ) -> list[ScoredWork]:
         # get user embedding
         area_of_interest_description = self.user_service.area_of_interest_description(user_name)
-        area_of_interest_embedding = self.llm_interface.create_embedding(area_of_interest_description)
+        return self.get_relevant_works_for_query(area_of_interest_description, n, start_date)
 
+    def get_relevant_works_for_query(self, query: str, n: int, start_date: datetime.datetime) -> list[ScoredWork]:
+        query_embedding = self.llm_interface.create_embedding(query)
         work_ids, similarities = self.publication_repository.get_openalex_ids_by_embedding_similarity(
-            area_of_interest_embedding, n, start_date
+            query_embedding, n, start_date
         )
         works = self.get_works_by_openalex_ids(work_ids)
         scored_works = [ScoredWork(work, similarity) for work, similarity in zip(works, similarities)]

@@ -34,9 +34,24 @@ def most_relevant(
     publication_service: PublicationService = context.obj.publication_service
 
     typer.echo(f"Getting the {n} most relevant works for user {user_name}...")
-    scored_works = publication_service.get_most_relevant_works_by_embedding(user_name, n, start_date)
+    scored_works = publication_service.get_relevant_works_for_user(user_name, n, start_date)
     for scored_work in scored_works:
         typer.echo(scored_work)
+
+
+@publication_commands.command()
+def search(
+    context: typer.Context,
+    query: str,
+    n: Annotated[int, typer.Argument()] = 10,
+    start_date: Annotated[Optional[datetime.datetime], typer.Argument] = None,
+) -> None:
+    publication_service: PublicationService = context.obj.publication_service
+
+    typer.echo(f"Getting the {n} most relevant works for query '{query}'...")
+    works = publication_service.get_relevant_works_for_query(query, n, start_date)
+    for work in works:
+        typer.echo(work)
 
 
 @publication_commands.command()
