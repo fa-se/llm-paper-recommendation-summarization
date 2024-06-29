@@ -48,9 +48,13 @@ class PublicationService:
         )
 
         works = []
+        work_ids = {}
         for pyalex_work in chain(*query.paginate(per_page=200, n_max=(n_max if not no_limit else None))):
-            # don't return works without title
-            works.append(Work(pyalex_work))
+            # OpenAlex sometimes returns the same work multiple times, so we need to deduplicate
+            if pyalex_work['id'] not in work_ids:
+                work_ids[pyalex_work['id']] = True
+                works.append(Work(pyalex_work))
+
         logger.info(f"Found {len(works)} works.")
 
         return works
