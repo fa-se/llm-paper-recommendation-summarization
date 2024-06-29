@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, text
 
 from core.sqlalchemy_models import Publication
 from db import Session
@@ -18,6 +18,7 @@ class PublicationRepository:
         openalex_id: int,
         title: str,
         authors: list[str],
+        abstract: str,
         published: datetime,
         accessed: datetime,
         embedding: list[float],
@@ -26,6 +27,7 @@ class PublicationRepository:
             openalex_id=openalex_id,
             title=title,
             authors=authors,
+            abstract=abstract,
             publication_datetime_utc=published,
             accessed_datetime_utc=accessed,
             embedding=embedding,
@@ -54,3 +56,35 @@ class PublicationRepository:
         similarities = [result.similarity for result in results]
 
         return ids, similarities
+
+    def rebuild_bm25(self):
+        # First, check if the materialized statistics view already exists
+        view_exists = self.session.execute(
+            text("""
+                SELECT EXISTS (
+                    SELECT FROM pg_matviews 
+                    WHERE schemaname = 'public' AND matviewname = 'publication_abstract_bm25'
+                );
+                """)
+        ).scalar()
+        if view_exists:
+            # refresh
+            self.session.execute(
+                text("""
+                SELECT bm25_refresh('publication_abstract_bm25');
+                """)
+            )
+        else:
+            self.session.execute(
+                text("""
+                SELECT bm25_create('publication', 'abstract', 'publication_abstract_bm25', 0.75, 1.2); 
+                """)
+            )
+
+        self.session.execute(
+            text("""
+            UPDATE publication
+            SET bm25 = bm25_document_to_svector('publication_abstract_bm25', abstract, 'pgvector')::sparsevec;
+            """)
+        )
+        self.commit()

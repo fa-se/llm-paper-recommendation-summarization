@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pgvector.sqlalchemy import Vector
+from pgvector.sqlalchemy import Vector, SPARSEVEC
 from sqlalchemy import Integer, BigInteger, String, DateTime, ForeignKey, Float, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,6 +16,8 @@ class Publication(Base):
     authors: Mapped[list[str]] = mapped_column(ARRAY(String, dimensions=1), nullable=True)
     publication_datetime_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     accessed_datetime_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    abstract: Mapped[str] = mapped_column(String, nullable=True)
+    bm25: Mapped[list[float]] = mapped_column(SPARSEVEC, nullable=True)
     embedding: Mapped[list[float]] = mapped_column(Vector(1024))
 
 

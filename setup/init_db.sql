@@ -1,1 +1,3 @@
 CREATE EXTENSION vector;
+
+CREATE EXTENSION pg_bestmatch;

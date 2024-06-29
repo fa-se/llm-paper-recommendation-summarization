@@ -149,7 +149,6 @@ class PublicationService:
             else:
                 raise ValueError(f"Work {work} has no abstract, but the abstract is required for embedding.")
 
-        # TODO: Batch here (2000) to reduce memory consumption and to save intermediate results
         works_processed = 0
         for i in range(0, len(works_to_be_added), 2000):
             embeddings = self.llm_interface.create_embedding_batch(abstracts[i : i + 2000])
@@ -159,6 +158,7 @@ class PublicationService:
                     openalex_id=work.id,
                     title=work.title,
                     authors=work.authors,
+                    abstract=work.abstract,
                     published=work.publication_date,
                     accessed=access_timestamp,
                     embedding=embedding,
@@ -167,6 +167,7 @@ class PublicationService:
             works_processed += len(embeddings)
             logger.info(f"Progress: {works_processed} out of {len(works_to_be_added)} works embedded.")
 
+        self.publication_repository.rebuild_bm25()
         logger.info(f"Finished initialization for user {user_name}. Added {len(works_to_be_added)} works.")
         return works_to_be_added
 
