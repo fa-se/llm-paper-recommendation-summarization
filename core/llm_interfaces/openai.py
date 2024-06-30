@@ -14,7 +14,8 @@ from .base import LLMInterface, LLMType, Message, Task
 class OpenAIInterface(LLMInterface):
     defaults = {
         # https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo
-        "quality_model": "gpt-4-0125-preview",
+        # "quality_model": "gpt-4-0125-preview",
+        "quality_model": "gpt-4o-2024-05-13",
         "budget_model": "gpt-3.5-turbo-0125",
         "embedding_model": "text-embedding-3-large",
         "embedding_dimensions": 1024,
@@ -22,7 +23,8 @@ class OpenAIInterface(LLMInterface):
 
     model_to_cost_per_token = {
         # https://openai.com/pricing
-        "gpt-4-0125-preview": 10.00 / 1e6,
+        # "gpt-4-0125-preview": 10.00 / 1e6,
+        "gpt-4o-2024-05-13": 5.00 / 1e6,
         "gpt-3.5-turbo-0125": 0.50 / 1e6,
         "text-embedding-3-large": 0.13 / 1e6,
     }
