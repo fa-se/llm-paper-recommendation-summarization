@@ -57,6 +57,39 @@ class PublicationRepository:
 
         return ids, similarities
 
+    def get_openalex_ids_by_bm25_similarity(
+        self, query: str, top_n: int, start_date: datetime = None
+    ) -> tuple[list[int], list[float]]:
+        start_date_filter = ""
+        if start_date is not None:
+            start_date_filter = "AND publication_datetime_utc >= :start_date"
+
+        query_raw = f"""
+        SELECT openalex_id, score
+        FROM
+        (
+            SELECT openalex_id, publication.publication_datetime_utc,
+                    -(bm25 <#> bm25_query_to_svector('publication_abstract_bm25', :query, 'pgvector')::sparsevec) AS score
+            FROM publication
+        ) subquery   
+        WHERE score != double precision 'NaN'
+        {start_date_filter}
+        ORDER BY score DESC
+        LIMIT :top_n;
+        """
+
+        query_text = text(query_raw)
+        params = {"query": query, "top_n": top_n}
+        if start_date is not None:
+            params["start_date"] = start_date
+
+        results = self.session.execute(query_text, params).fetchall()
+
+        ids = [result[0] for result in results]
+        scores = [result[1] for result in results]
+
+        return ids, scores
+
     def rebuild_bm25(self):
         # First, check if the materialized statistics view already exists
         view_exists = self.session.execute(
