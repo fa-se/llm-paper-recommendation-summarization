@@ -1,6 +1,6 @@
 from sqlalchemy import MetaData
 
-import app.models as models
+import core.sqlalchemy_models as models
 from db.database import Session
 
 
