@@ -10,8 +10,8 @@ from core.repositories.publication_repository import PublicationRepository
 from core.services.publication_service import PublicationService
 from core.services.user_service import UserService
 from db import Session
-from publication import publication_commands
-from user import user_commands
+from .publication import publication_commands
+from .user import user_commands
 
 logger = logging.getLogger(__name__)
 app = typer.Typer()
