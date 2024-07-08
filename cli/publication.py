@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 import typer
 
 from core.dataclasses.data_classes import Work
-from core.services.publication_service import PublicationService
+from core.services.publication_service import PublicationService, get_work_by_openalex_id, get_works_by_topics
 from core.services.user_service import UserService
 from core.sqlalchemy_models import UserConfigTopicAssociation
 from utils.decorator import handle_db_exceptions
@@ -58,7 +58,7 @@ def search(
 def summarize(context: typer.Context, user_name: str, openalex_id: str) -> None:
     publication_service: PublicationService = context.obj.publication_service
 
-    work = publication_service.get_work_by_openalex_id(openalex_id)
+    work = get_work_by_openalex_id(openalex_id)
     summarized_work = publication_service.summarize_works_for_user(user_name, [work])[0]
     typer.echo(f"Summary for work {summarized_work.work}:")
     typer.echo(summarized_work.summary)
@@ -73,7 +73,7 @@ def rate_all_published_after(context: typer.Context, user_name: str, date: datet
     topic_ids = [topic.topic_id for topic in topics]
 
     typer.echo(f"Getting works published after {date}...")
-    works: list[Work] = publication_service.get_works_by_topics(topic_ids, published_after=date, require_abstract=True)
+    works: list[Work] = get_works_by_topics(topic_ids, published_after=date, require_abstract=True)
     typer.echo(f"Found {len(works)} works. Works without abstract are ignored.")
 
     typer.echo("Proceeding with scoring by embedding similarity...")
