@@ -24,8 +24,8 @@ class OpenAIInterface(LLMInterface):
     model_to_cost_per_token = {
         # https://openai.com/pricing
         # "gpt-4-0125-preview": 10.00 / 1e6,
-        "gpt-4o-2024-05-13": 5.00 / 1e6,
-        "gpt-3.5-turbo-0125": 0.50 / 1e6,
+        "gpt-4o-2024-05-13": {"input": 5.00 / 1e6, "output": 15.00 / 1e6},
+        "gpt-3.5-turbo-0125": {"input": 0.50 / 1e6, "output": 1.50 / 1e6},
         "text-embedding-3-large": 0.13 / 1e6,
     }
 
@@ -132,12 +132,16 @@ class OpenAIInterface(LLMInterface):
 
         response = self.client.chat.completions.create(messages=completion_messages, model=model)
 
-        used_tokens = response.usage.total_tokens
-        cost = used_tokens * self.model_to_cost_per_token[model]
+        input_tokens = response.usage.prompt_tokens
+        output_tokens = response.usage.completion_tokens
+        cost = (input_tokens * self.model_to_cost_per_token[model]["input"]) + (
+            output_tokens * self.model_to_cost_per_token[model]["output"]
+        )
         self.accumulated_costs += cost
         if self.print_usage_info:
             print(
-                f"Model: {model}, Tokens: {used_tokens}, Cost: ${cost:.2f}, Accumulated cost: ${self.accumulated_costs:.2f}"
+                f"Model: {model}, Input Tokens: {input_tokens}, Output Tokens: {output_tokens},\
+                Cost: ${cost:.2f}, Accumulated cost: ${self.accumulated_costs:.2f}"
             )
 
         return response.choices[0].message.content.strip()
