@@ -6,12 +6,13 @@ from os import environ
 
 import pyalex
 
-from core.dataclasses.data_classes import Work, ScoredWork, SummarizedWork
+from core.dataclasses.data_classes import Work, ScoredWork
 from core.llm_interfaces import LLMInterface
-from core.llm_interfaces.tasks import CustomizedSummaryTask
 from core.repositories.publication_repository import PublicationRepository
-from core.services.user_service import UserService
-from core.sqlalchemy_models import UserConfigTopicAssociation
+from core.repositories.topic_repository import TopicRepository
+from core.sqlalchemy_models.openalex.topic import Topic
+
+# from core.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
 pyalex.config.email = environ.get("OPENALEX_CONTACT_EMAIL")
@@ -20,6 +21,9 @@ pyalex.config.email = environ.get("OPENALEX_CONTACT_EMAIL")
 def _normalize_scores(scores: list[float]) -> list[float]:
     min_score = min(scores)
     max_score = max(scores)
+    # avoid division by zero
+    if min_score == max_score:
+        return [0.0 for _ in scores]
     return [(score - min_score) / (max_score - min_score) for score in scores]
 
 
@@ -43,10 +47,12 @@ def get_works_by_openalex_ids(openalex_ids: list[str] | list[int]) -> list[Work]
     if isinstance(ids[0], int):
         ids = [f"W{str(work_id)}" for work_id in openalex_ids]
 
-    query = pyalex.Works().filter(openalex="|".join(ids))
     works = []
-    for pyalex_work in chain(*query.paginate(per_page=200, n_max=None)):
-        works.append(Work(pyalex_work))
+    # OpenAlex API only allows 100 ids per query
+    for i in range(0, len(ids), 100):
+        query = pyalex.Works().filter(openalex="|".join(ids[i : i + 100]))
+        for pyalex_work in chain(*query.paginate(per_page=200, n_max=None)):
+            works.append(Work(pyalex_work))
 
     # because the API returns works in an arbitrary order, we need to restore the original order
     works = sorted(works, key=lambda work: openalex_ids.index(work.id))
@@ -54,7 +60,7 @@ def get_works_by_openalex_ids(openalex_ids: list[str] | list[int]) -> list[Work]
 
 
 def get_works_by_topics(
-    topic_ids: [int], published_after: datetime.date, require_abstract=True, n_max: int = 2000
+    topic_ids: [int], published_after: datetime.date, require_abstract=True, n_max: int = 2000, most_recent_first=True
 ) -> list[Work]:
     topic_filter_str = "|".join(f"T{str(topic_id)}" for topic_id in topic_ids)
     # ISO 8601 date format
@@ -71,6 +77,9 @@ def get_works_by_topics(
     )
     if require_abstract:
         query = query.filter(has_abstract=True)
+
+    if most_recent_first:
+        query = query.sort(publication_date="desc")
 
     logger.info(
         f"Querying OpenAlex for works with topics {topic_ids} published after {published_after} (n_max={n_max if not no_limit else "unlimited"}) Query URL: {query.url}"
@@ -117,64 +126,25 @@ def compute_relevance_scores_by_topics(
 
 class PublicationService:
     def __init__(
-        self, publication_repository: PublicationRepository, user_service: UserService, llm_interface: LLMInterface
+        self,
+        publication_repository: PublicationRepository,
+        topic_repository: TopicRepository,
+        llm_interface: LLMInterface,
     ):
         self.publication_repository = publication_repository
-        self.user_service = user_service
+        self.topic_repository = topic_repository
+        # self.user_service = user_service
         self.llm_interface = llm_interface
-
-    def compute_relevance_score_by_embedding_similarity(
-        self,
-        user_name: str,
-        works: list[Work],
-    ) -> list[ScoredWork]:
-        # get user embedding
-        area_of_interest_description = self.user_service.area_of_interest_description(user_name)
-        area_of_interest_embedding = self.llm_interface.create_embedding(area_of_interest_description)
-
-        # need to extract all abstracts first for batch embedding
-        abstracts = []
-        for work in works:
-            if work.abstract:
-                abstracts.append(work.abstract)
-            else:
-                raise ValueError(f"Work {work} has no abstract, but the abstract is required for scoring.")
-
-        embeddings = self.llm_interface.create_embedding_batch(abstracts)
-
-        scored_works: list[ScoredWork] = []
-        for work, embedding in zip(works, embeddings):
-            # cosine similarity
-            score = sum([a * b for a, b in zip(embedding, area_of_interest_embedding)])
-            scored_works.append(ScoredWork(work, score))
-
-        return scored_works
-
-    def summarize_works_for_user(self, user_name: str, works: list[Work]) -> list[SummarizedWork]:
-        area_of_interest_description = self.user_service.area_of_interest_description(user_name)
-
-        # only consider works with abstracts
-        works_with_abstracts = [work for work in works if work.abstract]
-
-        summarized_works: list[SummarizedWork] = []
-        for work in works_with_abstracts:
-            task = CustomizedSummaryTask(
-                area_of_research=area_of_interest_description,
-                abstract=work.abstract,
-                prioritize_quality=True,
-            )
-            summary = self.llm_interface.handle_task(task)
-            summarized_works.append(SummarizedWork(work, summary))
-
-        return summarized_works
 
     # Fetches all potentially relevant works for a user published after a certain date, embeds the abstracts and stores them in the database
     # Does not yet score publications
-    def initialize_for_user(self, user_name: str, start_date: datetime.datetime) -> list[Work]:
-        topics: list[UserConfigTopicAssociation] = self.user_service.followed_topics(user_name)
-        topic_ids = [topic.topic_id for topic in topics]
+    def initialize_for_query(
+        self, query: str, start_date: datetime.datetime, limit: int = -1, num_topics: int = 5
+    ) -> tuple[list[Topic], list[Work]]:
+        topics = self._get_matching_topics_for_query(query, num_topics)
+        topic_ids = [topic.id for topic in topics]
 
-        works = get_works_by_topics(topic_ids, start_date, require_abstract=True, n_max=-1)
+        works = get_works_by_topics(topic_ids, start_date, require_abstract=True, n_max=limit)
         access_timestamp = datetime.datetime.now()
 
         # skip works that have already been embedded
@@ -182,7 +152,7 @@ class PublicationService:
         works_to_be_added = [work for work in works if work.id not in known_works]
 
         logger.info(
-            f"Embedding {len(works_to_be_added)} works for user {user_name}. {len(works) - len(works_to_be_added)} works were already present."
+            f"Embedding {len(works_to_be_added)} works. {len(works) - len(works_to_be_added)} works were already present."
         )
         # embed abstracts
         abstracts = []
@@ -211,33 +181,44 @@ class PublicationService:
             logger.info(f"Progress: {works_processed} out of {len(works_to_be_added)} works embedded.")
 
         self.publication_repository.rebuild_bm25()
-        logger.info(f"Finished initialization for user {user_name}. Added {len(works_to_be_added)} works.")
-        return works_to_be_added
-
-    def get_relevant_works_for_user(
-        self, user_name: str, n: int, start_date: datetime.datetime = None
-    ) -> list[ScoredWork]:
-        # get user embedding
-        area_of_interest_description = self.user_service.area_of_interest_description(user_name)
-        return self.get_relevant_works_for_query(area_of_interest_description, n, start_date)
+        logger.info(f"Finished initialization. Added {len(works_to_be_added)} works.")
+        return topics, works_to_be_added
 
     def get_relevant_works_for_query(
-        self, query: str, n: int, start_date: datetime.datetime, search_type: SearchType = SearchType.HYBRID
-    ) -> list[ScoredWork]:
+        self,
+        query: str,
+        n: int,
+        start_date: datetime.datetime,
+        search_type: SearchType = SearchType.HYBRID,
+        rerank: bool = True,
+    ) -> list[Work]:
+        # if reranking is enabled, fetch more candidate publications so that reranking can push up
+        # publications missed by bm25/embedding retrieval
+        n_initial = n * 10 if rerank else n
+
+        print(f"Getting top {n} publications using {search_type} search. Reranking enabled: {rerank}")
         if search_type == SearchType.SEMANTIC:
-            work_ids, scores = self._semantic_search(query, n, start_date, normalize=True)
+            work_ids, scores = self._semantic_search(query, n_initial, start_date, normalize=True)
         elif search_type == SearchType.BM25:
-            work_ids, scores = self._bm25_search(query, n, start_date, normalize=True)
+            work_ids, scores = self._bm25_search(query, n_initial, start_date, normalize=True)
         elif search_type == SearchType.HYBRID:
-            work_ids, scores = self._hybrid_search(query, n, start_date, normalize=True)
+            work_ids, scores = self._hybrid_search(query, n_initial, start_date, normalize=True)
         else:
             raise ValueError(f"Invalid search type {search_type}")
 
         # now "hydrate" the works via the OpenAlex API
         works = get_works_by_openalex_ids(work_ids)
-        # finally, create ScoredWork objects
-        scored_works = [ScoredWork(work, score) for work, score in zip(works, scores)]
-        return scored_works
+
+        if rerank:
+            print(f"Reranking to identify top {n} among {len(work_ids)} publications.")
+            works = self._rerank(query, works, k=n)
+
+        return works
+
+    def _get_matching_topics_for_query(self, query: str, n_topics: int) -> list[Topic]:
+        query_embedding = self.llm_interface.create_embedding(query)
+        topics, _ = self.topic_repository.get_topics_by_embedding_similarity(query_embedding, top_n=n_topics)
+        return topics
 
     def _semantic_search(
         self, query: str, n: int, start_date: datetime.datetime, normalize: bool = False
@@ -264,12 +245,12 @@ class PublicationService:
         n: int,
         start_date: datetime.datetime,
         normalize: bool = False,
-        weights: tuple[float, float] = (0.6, 0.4),
+        weights: tuple[float, float] = (0.8, 0.2),
     ) -> tuple[list[int], list[float]]:
         work_ids_semantic, scores_semantic = self._semantic_search(query, n * 2, start_date, normalize)
         work_ids_bm25, scores_bm25 = self._bm25_search(query, n * 2, start_date, normalize)
 
-        # scale by weight of retrieval method: 0.6 for semantic, 0.4 for bm25
+        # scale by weight of retrieval method
         scores_semantic = [weights[0] * score for score in scores_semantic]
         scores_bm25 = [weights[1] * score for score in scores_bm25]
         # combine scores
@@ -283,3 +264,32 @@ class PublicationService:
         merged_works = sorted(merged_works.items(), key=lambda x: x[1], reverse=True)[:n]
 
         return [work_id for work_id, _ in merged_works], [score for _, score in merged_works]
+
+    def _rerank(self, query: str, works: list[Work | ScoredWork], k: int = 10) -> list[Work]:
+        from llmrankers.setwise import OpenAiSetwiseLlmRanker
+        from llmrankers.rankers import SearchResult
+
+        if isinstance(works[0], ScoredWork):
+            works = [scored_work.work for scored_work in works]
+
+        # check if the works have abstracts
+        if not all(work.abstract for work in works):
+            raise ValueError("All works must have abstracts for reranking.")
+
+        reranker = OpenAiSetwiseLlmRanker(
+            model_name_or_path="gpt-4o-mini-2024-07-18",
+            api_key=environ.get("OPENAI_API_KEY"),
+            method="heapsort",
+            num_child=2,
+            k=k,
+        )
+
+        docs = [SearchResult(docid=work.id, text=work.abstract, score=None) for work in works]
+        reranked_docs, _ = reranker.rerank(query, docs)
+
+        # we need to get the original Work objects back via docid
+        reranked_works = []
+        for doc in reranked_docs:
+            reranked_works.extend([work for work in works if work.id == doc.docid])
+
+        return reranked_works

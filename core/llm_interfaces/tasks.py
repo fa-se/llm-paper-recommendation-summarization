@@ -1,3 +1,6 @@
+import string
+import textwrap
+
 from .base import LLMType, Message, Task
 
 
@@ -54,18 +57,81 @@ class CustomizedSummaryTask(Task):
     Task to generate a summary of the input, customized to the user's area of interest.
     """
 
+    self_discover_prompt_templates = string.Template(
+        textwrap.dedent("""# Given Reasoning Structure
+
+            ```json
+            $reasoning_structure
+            ```
+            
+            # Given Task
+            
+            $task
+            
+            ## Example Output 
+            
+            ```json
+            {{
+              ...
+            }}
+            ```
+            
+            # Detailed Instructions 
+            
+            You must use the given REASONING STRUCTURE to solve the GIVEN TASK, both are provided above.
+            The REASONING STRUCTURE will guide your answer for the GIVEN TASK. 
+            You must fill out ALL of the empty strings on the value side of the key-value pairs in the JSON structure of the REASONING STRUCTURE.
+            Your output will consist of one codeblock. The codeblock will be a json codeblock enclosed by triple back-ticks with the json language specifier as shown in the "Example Output".
+            The json codeblock will contain the completely filled out reasoning structure.
+        """)
+    )
+
+    task_template = string.Template(
+        """Below, you will be provided with the abstract of a research publication and the description of a user's research interests. Your task is to write a summary of the publication that focuses on aspects related to these research interests.
+        The target of the summary is the user who provided the description of their research interests, and thus the summary should be tailored to their interests and adopt their terminology. It should not include any verbatim text from the abstract or the user-provided description. The summary should be as brief as possible while still being informative, helping the user to quickly grasp the essential points. It should not directly address the user.
+    
+        ## Research Interest Description
+        $research_interest_description
+    
+        ## Abstract
+        $abstract
+        """
+    )
+
+    reasoning_structure = """{
+        "Reasoning Structure": {
+            "Step 1: Identify Key Findings": {
+                "Action": "Extract key findings from the abstract.",
+                "Key Findings": ""
+            },
+            "Step 2: Describe Methodologies": {
+                "Action": "Outline the methodologies used in the publication.",
+                "Methodologies": ""
+            },
+            "Step 3: Summarize Conclusions": {
+                "Action": "Summarize the conclusions drawn from the research.",
+                "Conclusions": ""
+            },
+            "Step 5: Align with Research Interests": {
+                "Action": "Highlight aspects related to the user's research interests.",
+                "Related Aspects": ""
+            },
+            "Step 6: Assess Significance": {
+                "Action": "Assess the significance of the publication for the user's research areas.",
+                "Significance": ""
+            },
+            "FINAL_ANSWER": ""
+        }
+    }
+    """
+
     prompt_templates = {
         LLMType.GPT: {
             "system": Message(
                 "system",
-                "You will be provided with the abstract of a scientific publication, as well as a description of an area of research. "
-                "Your task is to generate a summary of the abstract, explaining the topic of the publication and highlighting how it might be relevant to the area of research. "
-                "Additionally, you are to provide a short assessment of how well the publication matches the area of research, which is following below."
-                "Formulate your answer so that it can be presented alongside the publication metadata to assist the user in deciding whether they should read the publication or not. "
-                "Do not use markdown or any special formatting.\n\n"
-                "Description of the area of research: {area_of_interest_description}",
-            ),
-            "user": Message("user", "{abstract}"),
+                "You are a helpful AI chatbot who pays very close attention to instructions"
+                "from the user - especially any instructions on how to format your response.",
+            )
         }
     }
 
@@ -92,5 +158,9 @@ class CustomizedSummaryTask(Task):
         """
         template = self.prompt_templates[llm_type]
         system_message = template["system"].format(area_of_interest_description=self.area_of_research)
-        user_message = template["user"].format(abstract=self.abstract)
+        task = self.task_template.substitute(
+            research_interest_description=self.area_of_research, abstract=self.abstract
+        )
+        prompt = self.self_discover_prompt_templates.substitute(reasoning_structure=self.reasoning_structure, task=task)
+        user_message = Message("user", prompt)
         return [system_message, user_message]

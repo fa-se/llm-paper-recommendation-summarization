@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import select, desc, text
+from sqlalchemy import select, desc, text, func
 
 from core.sqlalchemy_models import Publication
 from db import Session
@@ -35,9 +35,16 @@ class PublicationRepository:
         self.session.add(publication)
         return publication
 
+    def get_by_openalex_id(self, openalex_id: int) -> Publication:
+        return self.session.query(Publication).filter(Publication.openalex_id == openalex_id).one_or_none()
+
     def get_all_openalex_ids(self) -> list[int]:
         results = self.session.query(Publication.openalex_id).all()
         return [result[0] for result in results]
+
+    def get_random_publications(self, n: int) -> list[Publication]:
+        query = self.session.query(Publication).order_by(func.random()).limit(n)
+        return query.all()
 
     def get_openalex_ids_by_embedding_similarity(
         self, embedding: list[float], top_n: int, start_date: datetime = None
@@ -120,4 +127,11 @@ class PublicationRepository:
             SET bm25 = bm25_document_to_svector('publication_abstract_bm25', abstract, 'pgvector')::sparsevec;
             """)
         )
+        self.commit()
+
+    def count(self) -> int:
+        return self.session.query(Publication).count()
+
+    def truncate(self):
+        self.session.query(Publication).delete()
         self.commit()

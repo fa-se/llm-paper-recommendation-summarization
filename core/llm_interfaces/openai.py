@@ -29,8 +29,9 @@ class OpenAIInterface(LLMInterface):
         "text-embedding-3-large": 0.13 / 1e6,
     }
 
-    def __init__(self, print_usage_info: bool = True):
+    def __init__(self, print_usage_info: bool = False):
         self.client = OpenAI(api_key=environ.get("OPENAI_API_KEY"))
+        # self.client = OpenAI(api_key=environ.get("OPENAI_API_KEY"), base_url="http://host.docker.internal:10080/v1")
         self.accumulated_costs = 0.0
         self.print_usage_info = print_usage_info
 

@@ -42,6 +42,12 @@ class Work:
     def __str__(self) -> str:
         return f"'{self.title}' by [{', '.join(self.authors)}] ({self.publication_date:%Y-%m}) | # cited by: {self.cited_by_count} | {self.openalex_url()}"
 
+    def __eq__(self, other: Self):
+        return self.id == other.id
+
+    def __hash__(self):
+        return hash(self.id)
+
 
 @total_ordering
 class ScoredWork:

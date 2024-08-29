@@ -108,3 +108,9 @@ class UserRepository:
             .one_or_none()
         )
         self.session.delete(association)
+
+    def truncate(self):
+        self.session.query(User).delete()
+        self.session.query(UserConfig).delete()
+        self.session.query(UserConfigTopicAssociation).delete()
+        self.commit()

@@ -5,3 +5,4 @@ tiktoken
 psycopg[binary,pool]
 sqlalchemy
 pgvector
+llm-rankers
