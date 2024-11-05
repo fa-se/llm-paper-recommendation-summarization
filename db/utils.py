@@ -15,21 +15,38 @@ def create_database():
         models.Base.metadata.create_all(session.get_bind())
 
 
+def save_ddl():
+    import os
+    from sqlalchemy import create_mock_engine
+
+    if os.path.exists("ddl.sql"):
+        os.remove("ddl.sql")
+
+    def dump(sql, *multiparams, **params):
+        ddl = sql.compile(dialect=engine.dialect)
+        # write to file
+        with open("ddl.sql", "a") as f:
+            f.write(str(ddl) + ";")
+
+    engine = create_mock_engine("postgresql+psycopg://", dump)
+    models.Base.metadata.create_all(engine, checkfirst=False)
+
+
 def recreate_tables(tables_or_models):
     with Session() as session:
         # Extract Table objects from models, if necessary
         tables = [item.__table__ if hasattr(item, "__table__") else item for item in tables_or_models]
-
+        print(f"Recreating tables: {tables}")
         # Reflect the current database schema into a new MetaData object
         metadata = MetaData()
         metadata.reflect(bind=session.get_bind())
-
+        print(f"Dropping tables: {tables}")
         # Drop only the specified tables, respecting dependencies
         metadata.drop_all(bind=session.get_bind(), tables=tables)
-
+        print(f"Creating tables: {tables}")
         # Recreate the tables using the Base metadata
         models.Base.metadata.create_all(bind=session.get_bind(), tables=tables)
-
+        print(f"Tables created: {tables}")
         # Commit the transaction to ensure changes are applied
         session.commit()
 
@@ -51,8 +68,4 @@ def add_test_user():
 
 
 if __name__ == "__main__":
-    recreate_tables(
-        [
-            models.UserConfigPublicationAssociation,
-        ]
-    )
+    save_ddl()
