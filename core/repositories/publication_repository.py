@@ -117,7 +117,7 @@ class PublicationRepository:
         else:
             self.session.execute(
                 text("""
-                SELECT bm25_create('publication', 'abstract', 'publication_abstract_bm25', 0.75, 1.2); 
+                SELECT bm25_create('publication', 'abstract', 'publication_abstract_bm25'); 
                 """)
             )
 
