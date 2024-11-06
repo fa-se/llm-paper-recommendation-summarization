@@ -5,7 +5,7 @@
 - PostgreSQL instance
     - with [pgvector](https://github.com/pgvector/pgvector) (tested with 0.7.2 and 0.8.0)
     - with [pg_bestmatch_rs](https://github.com/tensorchord/pg_bestmatch.rs) (for BM25, tested with 0.0.1)
-- Docker and docker-compose
+- Docker with Docker Compose
 - OpenAI API key
 
 ## Preparing the Database
@@ -18,12 +18,12 @@
 ## Setup Instructions
 
 1. Copy `.env.example` to `.env` and fill in the required values (database connection parameters, OpenAI API key, etc).
-2. Run `docker-compose build` to obtain an image with the required dependencies.
+2. Run `docker compose build` to obtain an image with the required dependencies.
 
 ## Testing the Setup
 
 You can test the setup by running\
-`docker-compose run --rm app bash -c "python3 setup/test.py 'llm rerankers'"`
+`docker compose run --rm app bash -c "python3 setup/test.py 'llm rerankers'"`
 
 This script tests all components of the system, including the database connection, database extensions, OpenAI and
 OpenAlex APIs, and the reranking model.

@@ -1,14 +1,38 @@
-version: '3.8'
 services:
   app:
     build: .
     volumes:
       - .:/usr/src/app/
-    network_mode: "host"
     environment:
       - OPENALEX_CONTACT_EMAIL
       - OPENAI_API_KEY
-      - DB_HOST
+      - DB_HOST=db
       - DB_USER
       - DB_PASSWORD
       - DB_NAME
+      - DEBUG
+    networks:
+      - my_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - db
+  db:
+    build: setup
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    #      - ./setup/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - my_network
+    ports:
+      - "5432:5432"
+volumes:
+  postgres_data:
+
+networks:
+  my_network:
+    driver: bridge
