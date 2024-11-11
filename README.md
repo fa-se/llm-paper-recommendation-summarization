@@ -4,7 +4,7 @@
 
 Developed during my master's thesis at TU Berlin, this library provides an end-to-end RAG pipeline for paper
 recommendation and summarization.
-Its purpose is to assist researches in staying up-to-date with the latest research in their field. As such, it is
+Its purpose is to assist researchers in staying up-to-date with the latest research in their field. As such, it is
 focused on the discovery of new research, using [OpenAlex](https://openalex.org/) as a data source.
 
 From a free-form text description (FFTD) of a research interest, the system retrieves a set of candidate papers from
