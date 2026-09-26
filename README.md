@@ -54,6 +54,9 @@ and junk abstracts already stored: `python setup/dedupe_publications.py [--dry-r
    external network, so that other containers can reach the database as well.
 3. Run `docker compose build` to obtain an image with the required dependencies.
 
+Without Docker, install the dependencies into a Python 3.12 virtual environment: `requirements.txt` lists them
+unpinned, `requirements.lock` pins the versions last tested.
+
 ### Testing the Setup
 You can test the setup by running\
 `docker compose run --rm app bash -c "python3 setup/test.py 'llm rerankers'"`
