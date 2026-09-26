@@ -1,3 +1,4 @@
+import re
 import string
 import textwrap
 
@@ -164,3 +165,44 @@ class CustomizedSummaryTask(Task):
         prompt = self.self_discover_prompt_templates.substitute(reasoning_structure=self.reasoning_structure, task=task)
         user_message = Message("user", prompt)
         return [system_message, user_message]
+
+
+class SetwiseComparisonTask(Task):
+    """
+    One comparison of setwise LLM reranking: which of the passages is the most relevant to the query?
+    Prompt of llm-rankers' OpenAiSetwiseLlmRanker (https://github.com/ielab/llm-rankers), which the thesis used.
+    """
+
+    labels = "ABCDEFGHIJKLMNOPQRSTUVW"
+    system_prompt = (
+        "You are RankGPT, an intelligent assistant specialized in selecting the most relevant passage from a pool of "
+        "passages based on their relevance to the query."
+    )
+    temperature = 0.0
+    # a comparison normally takes ~1s; retry a stuck request early instead of stalling the whole ranking
+    timeout = 15.0
+
+    def __init__(self, query: str, passages: list[str]):
+        super().__init__(prioritize_quality=False)
+        self.query = query
+        self.passages = passages
+
+    @property
+    def model_tier(self) -> str:
+        return "rerank"
+
+    def get_prompt(self, llm_type: LLMType) -> [Message]:
+        passages = "\n\n".join(f'Passage {self.labels[i]}: "{passage}"' for i, passage in enumerate(self.passages))
+        prompt = (
+            f'Given a query "{self.query}", which of the following passages is the most relevant one to the query?\n\n'
+            f"{passages}\n\nOutput only the passage label of the most relevant passage."
+        )
+        return [Message("system", self.system_prompt), Message("user", prompt)]
+
+    def parse_response(self, response: str) -> int | None:
+        """Index of the chosen passage, or None if the response names none of them."""
+        match = re.search(r"Passage ([A-Z])", response)
+        label = match.group(1) if match else response.strip()
+        if len(label) == 1 and label in self.labels[: len(self.passages)]:
+            return self.labels.index(label)
+        return None

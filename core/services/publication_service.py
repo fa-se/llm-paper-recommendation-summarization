@@ -11,6 +11,7 @@ from core.llm_interfaces import LLMInterface
 from core.repositories.publication_repository import PublicationRepository
 from core.repositories.topic_repository import TopicRepository
 from core.services.deduplication import DuplicateFilter, has_usable_abstract
+from core.services.setwise_reranker import SetwiseHeapsortReranker
 from core.sqlalchemy_models.openalex.topic import Topic
 
 # from core.services.user_service import UserService
@@ -267,9 +268,6 @@ class PublicationService:
         return [work_id for work_id, _ in merged_works], [score for _, score in merged_works]
 
     def _rerank(self, query: str, works: list[Work | ScoredWork], k: int = 10) -> list[Work]:
-        from llmrankers.setwise import OpenAiSetwiseLlmRanker
-        from llmrankers.rankers import SearchResult
-
         if isinstance(works[0], ScoredWork):
             works = [scored_work.work for scored_work in works]
 
@@ -277,26 +275,4 @@ class PublicationService:
         if not all(work.abstract for work in works):
             raise ValueError("All works must have abstracts for reranking.")
 
-        from core.llm_interfaces.openai import OpenAIInterface, completion_params
-
-        model = OpenAIInterface.defaults["rerank_model"]
-        params = completion_params(model, OpenAIInterface.defaults["rerank_reasoning_effort"], temperature=0.0)
-        reranker = OpenAiSetwiseLlmRanker(
-            model_name_or_path=model,
-            api_key=environ.get("OPENAI_API_KEY"),
-            method="heapsort",
-            num_child=2,
-            k=k,
-            temperature=params.get("temperature"),
-            reasoning_effort=params.get("reasoning_effort"),
-        )
-
-        docs = [SearchResult(docid=work.id, text=work.abstract, score=None) for work in works]
-        reranked_docs, _ = reranker.rerank(query, docs)
-
-        # we need to get the original Work objects back via docid
-        reranked_works = []
-        for doc in reranked_docs:
-            reranked_works.extend([work for work in works if work.id == doc.docid])
-
-        return reranked_works
+        return SetwiseHeapsortReranker(self.llm_interface).rerank(query, works, k=k)

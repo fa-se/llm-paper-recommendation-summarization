@@ -5,4 +5,3 @@ tiktoken
 psycopg[binary,pool]
 sqlalchemy
 pgvector
-llm-rankers @ git+https://github.com/fa-se/llm-rankers.git

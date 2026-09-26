@@ -49,7 +49,7 @@ def main(limit: int, num_topics: int, measure: bool):
         print("  topics: " + "; ".join(topic.name for topic in topics))
         if measure:
             measure_latency(query)
-    print(f"Tracked OpenAI cost (embeddings; reranking is not tracked): ${retrieval.llm_interface.accumulated_costs:.4f}")
+    print(f"Tracked OpenAI cost: ${retrieval.llm_interface.accumulated_costs:.4f}")
 
 
 if __name__ == "__main__":

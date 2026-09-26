@@ -66,3 +66,5 @@ number (100) of candidate papers from OpenAlex.
 These papers will be stored in the database and then ranked w.r.t the FFTD using a hybrid ranking model (embedding +
 BM25). After reranking via *[setwise.heapsort](https://arxiv.org/abs/2310.09497v2)*, the top 5 results are printed. The top 3 are then summarized, and the
 summaries are printed.
+
+The unit tests need neither API keys nor a database: `python -m unittest discover tests`

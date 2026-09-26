@@ -1,4 +1,5 @@
 import logging
+import time
 from os import environ
 
 import tiktoken
@@ -8,6 +9,8 @@ from openai.types.chat import (
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam,
 )
+
+from core.instrumentation import current_trace
 
 from .base import LLMInterface, LLMType, Message, Task
 
@@ -38,7 +41,7 @@ class OpenAIInterface(LLMInterface):
         "quality_reasoning_effort": environ.get("OPENAI_QUALITY_REASONING_EFFORT", "low"),
         "budget_model": environ.get("OPENAI_BUDGET_MODEL", "gpt-6-luna"),
         "budget_reasoning_effort": environ.get("OPENAI_BUDGET_REASONING_EFFORT", "none"),
-        # used by PublicationService._rerank (setwise reranking via llm-rankers)
+        # used for the comparisons of setwise reranking (core/services/setwise_reranker.py)
         "rerank_model": environ.get("OPENAI_RERANK_MODEL", "gpt-6-luna"),
         "rerank_reasoning_effort": environ.get("OPENAI_RERANK_REASONING_EFFORT", "none"),
         # keep: the topic embeddings in setup/openalex_embeddings.sql were created with this model and dimension
@@ -59,21 +62,38 @@ class OpenAIInterface(LLMInterface):
     }
 
     def __init__(self, print_usage_info: bool = False):
-        self.client = OpenAI(api_key=environ.get("OPENAI_API_KEY"))
+        # more retries than the SDK's default 2: concurrent reranking can briefly exceed the tokens-per-minute limit
+        self.client = OpenAI(api_key=environ.get("OPENAI_API_KEY"), max_retries=6)
         # self.client = OpenAI(api_key=environ.get("OPENAI_API_KEY"), base_url="http://host.docker.internal:10080/v1")
         self.accumulated_costs = 0.0
         self.print_usage_info = print_usage_info
 
     def handle_task(self, task: Task) -> str:
         messages = task.get_prompt(LLMType.GPT)
-        tier = "quality" if task.prioritize_quality else "budget"
+        tier = task.model_tier
         completion = self.create_completion(
             messages=messages,
             model=self.defaults[f"{tier}_model"],
             reasoning_effort=self.defaults[f"{tier}_reasoning_effort"],
+            temperature=task.temperature,
+            timeout=task.timeout,
+            response_format=task.get_response_format(LLMType.GPT),
         )
 
         return completion
+
+    def _track_usage(self, model: str, input_tokens: int, output_tokens: int, started: float) -> float:
+        """Adds the cost of one API request to the accumulated costs and the current trace; returns the cost."""
+        prices = self.model_to_cost_per_token.get(model)
+        if prices is None:
+            logger.warning(f"No price known for model {model}; its cost is not tracked")
+            prices = {"input": 0.0, "output": 0.0}
+        elif not isinstance(prices, dict):  # embedding models have a single price
+            prices = {"input": prices, "output": 0.0}
+        cost = (input_tokens * prices["input"]) + (output_tokens * prices["output"])
+        self.accumulated_costs += cost
+        current_trace().record_llm_call(model, input_tokens, output_tokens, cost, time.perf_counter() - started)
+        return cost
 
     def create_embedding(self, text: str, config: dict = None) -> list[float]:
         if config is None:
@@ -81,6 +101,7 @@ class OpenAIInterface(LLMInterface):
         # merge provided config with defaults
         config = {**self.defaults, **config}
 
+        started = time.perf_counter()
         response = self.client.embeddings.create(
             input=[text],
             model=config["embedding_model"],
@@ -88,8 +109,7 @@ class OpenAIInterface(LLMInterface):
         )
 
         used_tokens = response.usage.total_tokens
-        cost = used_tokens * self.model_to_cost_per_token[config["embedding_model"]]
-        self.accumulated_costs += cost
+        cost = self._track_usage(config["embedding_model"], used_tokens, 0, started)
         if self.print_usage_info:
             print(
                 f"Model: {config['embedding_model']}, Tokens: {used_tokens}, Cost: ${cost:.2f}, Accumulated cost: ${self.accumulated_costs:.2f}"
@@ -134,7 +154,9 @@ class OpenAIInterface(LLMInterface):
 
         embeddings: list[list[float]] = []
         used_tokens = 0
+        cost = 0.0
         for batch in batches:
+            started = time.perf_counter()
             response = self.client.embeddings.create(
                 input=batch,
                 model=config["embedding_model"],
@@ -142,9 +164,7 @@ class OpenAIInterface(LLMInterface):
             )
             embeddings.extend([embedding.embedding for embedding in response.data])
             used_tokens += response.usage.total_tokens
-
-        cost = used_tokens * self.model_to_cost_per_token[config["embedding_model"]]
-        self.accumulated_costs += cost
+            cost += self._track_usage(config["embedding_model"], response.usage.total_tokens, 0, started)
         if self.print_usage_info:
             print(
                 f"Model: {config['embedding_model']}, Tokens: {used_tokens}, Cost: ${cost:.2f}, Accumulated cost: ${self.accumulated_costs:.2f}"
@@ -152,7 +172,15 @@ class OpenAIInterface(LLMInterface):
 
         return embeddings
 
-    def create_completion(self, messages: list[Message], model: str, reasoning_effort: str | None = None) -> str:
+    def create_completion(
+        self,
+        messages: list[Message],
+        model: str,
+        reasoning_effort: str | None = None,
+        temperature: float | None = None,
+        timeout: float | None = None,
+        response_format: dict | None = None,
+    ) -> str:
         completion_messages: [ChatCompletionMessageParam] = []
         for message in messages:
             # Due to ChatCompletionMessageParam being a union, we need to check the role and instantiate the correct type
@@ -164,19 +192,18 @@ class OpenAIInterface(LLMInterface):
                 raise ValueError(f"Unsupported message role: {message.role}")
             completion_messages.append(message_param)
 
-        response = self.client.chat.completions.create(
-            messages=completion_messages, model=model, **completion_params(model, reasoning_effort)
-        )
+        optional_params = completion_params(model, reasoning_effort, temperature)
+        if timeout is not None:
+            optional_params["timeout"] = timeout
+        if response_format is not None:
+            optional_params["response_format"] = response_format
+        started = time.perf_counter()
+        response = self.client.chat.completions.create(messages=completion_messages, model=model, **optional_params)
 
         input_tokens = response.usage.prompt_tokens
         # includes reasoning tokens, which are billed as output
         output_tokens = response.usage.completion_tokens
-        prices = self.model_to_cost_per_token.get(model)
-        if prices is None:
-            logger.warning(f"No price known for model {model}; its cost is not tracked")
-            prices = {"input": 0.0, "output": 0.0}
-        cost = (input_tokens * prices["input"]) + (output_tokens * prices["output"])
-        self.accumulated_costs += cost
+        cost = self._track_usage(model, input_tokens, output_tokens, started)
         if self.print_usage_info:
             print(
                 f"Model: {model}, Input Tokens: {input_tokens}, Output Tokens: {output_tokens},\

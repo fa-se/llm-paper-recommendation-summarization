@@ -35,12 +35,25 @@ class Task:
     Inheriting classes can define custom logic to generate the corresponding prompt, e.g. to adapt the prompt to different LLMs.
     """
 
+    # sampling temperature (None: the model's default) and request timeout in seconds (None: the client's default)
+    temperature: float | None = None
+    timeout: float | None = None
+
     def __init__(self, prioritize_quality: bool = False):
         """
         Parameters:
             prioritize_quality (bool): Indicates whether to prioritize quality over cost for this task, e.g. by using larger models.
         """
         self.prioritize_quality = prioritize_quality
+
+    @property
+    def model_tier(self) -> str:
+        """Which of the LLM interface's configured models handles this task: "quality", "budget" or "rerank"."""
+        return "quality" if self.prioritize_quality else "budget"
+
+    def get_response_format(self, llm_type: LLMType) -> dict | None:
+        """Structured output format for the response, or None for free text."""
+        return None
 
     def get_prompt(self, llm_type: LLMType) -> [Message]:
         """
