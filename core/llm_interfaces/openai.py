@@ -1,3 +1,4 @@
+import logging
 from os import environ
 
 import tiktoken
@@ -10,21 +11,49 @@ from openai.types.chat import (
 
 from .base import LLMInterface, LLMType, Message, Task
 
+logger = logging.getLogger(__name__)
+
+REASONING_MODEL_PREFIXES = ("gpt-5", "gpt-6", "o1", "o3", "o4")
+
+
+def completion_params(model: str, reasoning_effort: str | None, temperature: float | None = None) -> dict:
+    """Returns the optional chat completion parameters that the given model accepts."""
+    params = {}
+    is_reasoning_model = model.startswith(REASONING_MODEL_PREFIXES)
+    # older models (gpt-4o, gpt-4.1) reject reasoning_effort
+    if is_reasoning_model and reasoning_effort:
+        params["reasoning_effort"] = reasoning_effort
+    # reasoning models only accept a custom temperature with reasoning_effort "none" (checked for gpt-6, 2026-09-26)
+    if temperature is not None and (not is_reasoning_model or reasoning_effort == "none"):
+        params["temperature"] = temperature
+    return params
+
 
 class OpenAIInterface(LLMInterface):
+    # Models can be overridden via env vars, e.g. to run the thesis' original 2024 models
+    # (OPENAI_QUALITY_MODEL=gpt-4o-2024-05-13, OPENAI_RERANK_MODEL=gpt-4o-mini-2024-07-18).
+    # https://developers.openai.com/api/docs/models
     defaults = {
-        # https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo
-        # "quality_model": "gpt-4-0125-preview",
-        "quality_model": "gpt-4o-2024-05-13",
-        "budget_model": "gpt-3.5-turbo-0125",
+        "quality_model": environ.get("OPENAI_QUALITY_MODEL", "gpt-6-sol"),
+        "quality_reasoning_effort": environ.get("OPENAI_QUALITY_REASONING_EFFORT", "low"),
+        "budget_model": environ.get("OPENAI_BUDGET_MODEL", "gpt-6-luna"),
+        "budget_reasoning_effort": environ.get("OPENAI_BUDGET_REASONING_EFFORT", "none"),
+        # used by PublicationService._rerank (setwise reranking via llm-rankers)
+        "rerank_model": environ.get("OPENAI_RERANK_MODEL", "gpt-6-luna"),
+        "rerank_reasoning_effort": environ.get("OPENAI_RERANK_REASONING_EFFORT", "none"),
+        # keep: the topic embeddings in setup/openalex_embeddings.sql were created with this model and dimension
         "embedding_model": "text-embedding-3-large",
         "embedding_dimensions": 1024,
     }
 
     model_to_cost_per_token = {
-        # https://openai.com/pricing
-        # "gpt-4-0125-preview": 10.00 / 1e6,
+        # https://developers.openai.com/api/docs/pricing (standard tier, checked 2026-09-26)
+        "gpt-6-astra": {"input": 10.00 / 1e6, "output": 50.00 / 1e6},
+        "gpt-6-sol": {"input": 2.00 / 1e6, "output": 10.00 / 1e6},
+        "gpt-6-luna": {"input": 0.10 / 1e6, "output": 0.50 / 1e6},
         "gpt-4o-2024-05-13": {"input": 5.00 / 1e6, "output": 15.00 / 1e6},
+        "gpt-4o-2024-08-06": {"input": 2.50 / 1e6, "output": 10.00 / 1e6},
+        "gpt-4o-mini-2024-07-18": {"input": 0.15 / 1e6, "output": 0.60 / 1e6},
         "gpt-3.5-turbo-0125": {"input": 0.50 / 1e6, "output": 1.50 / 1e6},
         "text-embedding-3-large": 0.13 / 1e6,
     }
@@ -37,8 +66,12 @@ class OpenAIInterface(LLMInterface):
 
     def handle_task(self, task: Task) -> str:
         messages = task.get_prompt(LLMType.GPT)
-        model = self.defaults["quality_model"] if task.prioritize_quality else self.defaults["budget_model"]
-        completion = self.create_completion(messages=messages, model=model)
+        tier = "quality" if task.prioritize_quality else "budget"
+        completion = self.create_completion(
+            messages=messages,
+            model=self.defaults[f"{tier}_model"],
+            reasoning_effort=self.defaults[f"{tier}_reasoning_effort"],
+        )
 
         return completion
 
@@ -119,7 +152,7 @@ class OpenAIInterface(LLMInterface):
 
         return embeddings
 
-    def create_completion(self, messages: list[Message], model: str) -> str:
+    def create_completion(self, messages: list[Message], model: str, reasoning_effort: str | None = None) -> str:
         completion_messages: [ChatCompletionMessageParam] = []
         for message in messages:
             # Due to ChatCompletionMessageParam being a union, we need to check the role and instantiate the correct type
@@ -131,13 +164,18 @@ class OpenAIInterface(LLMInterface):
                 raise ValueError(f"Unsupported message role: {message.role}")
             completion_messages.append(message_param)
 
-        response = self.client.chat.completions.create(messages=completion_messages, model=model)
+        response = self.client.chat.completions.create(
+            messages=completion_messages, model=model, **completion_params(model, reasoning_effort)
+        )
 
         input_tokens = response.usage.prompt_tokens
+        # includes reasoning tokens, which are billed as output
         output_tokens = response.usage.completion_tokens
-        cost = (input_tokens * self.model_to_cost_per_token[model]["input"]) + (
-            output_tokens * self.model_to_cost_per_token[model]["output"]
-        )
+        prices = self.model_to_cost_per_token.get(model)
+        if prices is None:
+            logger.warning(f"No price known for model {model}; its cost is not tracked")
+            prices = {"input": 0.0, "output": 0.0}
+        cost = (input_tokens * prices["input"]) + (output_tokens * prices["output"])
         self.accumulated_costs += cost
         if self.print_usage_info:
             print(

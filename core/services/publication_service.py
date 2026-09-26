@@ -276,12 +276,18 @@ class PublicationService:
         if not all(work.abstract for work in works):
             raise ValueError("All works must have abstracts for reranking.")
 
+        from core.llm_interfaces.openai import OpenAIInterface, completion_params
+
+        model = OpenAIInterface.defaults["rerank_model"]
+        params = completion_params(model, OpenAIInterface.defaults["rerank_reasoning_effort"], temperature=0.0)
         reranker = OpenAiSetwiseLlmRanker(
-            model_name_or_path="gpt-4o-mini-2024-07-18",
+            model_name_or_path=model,
             api_key=environ.get("OPENAI_API_KEY"),
             method="heapsort",
             num_child=2,
             k=k,
+            temperature=params.get("temperature"),
+            reasoning_effort=params.get("reasoning_effort"),
         )
 
         docs = [SearchResult(docid=work.id, text=work.abstract, score=None) for work in works]
