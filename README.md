@@ -47,7 +47,9 @@ see [usage_example.ipynb](usage_example.ipynb) or
 
 ### Setup Instructions
 1. Copy `.env.example` to `.env` and fill in the required values (database connection parameters, OpenAI API key, etc).
-2. Run `docker compose build` to obtain an image with the required dependencies.
+2. Create the shared Docker network via `docker network create postgres_network`. The compose file uses it as an
+   external network, so that other containers can reach the database as well.
+3. Run `docker compose build` to obtain an image with the required dependencies.
 
 ### Testing the Setup
 You can test the setup by running\
