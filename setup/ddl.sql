@@ -13,7 +13,6 @@ CREATE TABLE openalex_domain (
 	PRIMARY KEY (id)
 );
 
-
 CREATE TABLE publication (
 	id SERIAL NOT NULL, 
 	openalex_id BIGINT NOT NULL, 
@@ -29,10 +28,8 @@ CREATE TABLE publication (
 	PRIMARY KEY (id), 
 	UNIQUE (openalex_id)
 );
-
-CREATE INDEX ix_publication_title_key ON publication (title_key);
 CREATE INDEX ix_publication_abstract_key ON publication (abstract_key);
-
+CREATE INDEX ix_publication_title_key ON publication (title_key);
 
 CREATE TABLE openalex_field (
 	wikidata VARCHAR NOT NULL, 
@@ -47,7 +44,6 @@ CREATE TABLE openalex_field (
 	FOREIGN KEY(domain_id) REFERENCES openalex_domain (id)
 );
 
-
 CREATE TABLE openalex_subfield (
 	wikidata VARCHAR NOT NULL, 
 	field_id INTEGER NOT NULL, 
@@ -61,7 +57,6 @@ CREATE TABLE openalex_subfield (
 	FOREIGN KEY(field_id) REFERENCES openalex_field (id)
 );
 
-
 CREATE TABLE openalex_topic (
 	keywords VARCHAR[] NOT NULL, 
 	subfield_id INTEGER NOT NULL, 
@@ -74,4 +69,3 @@ CREATE TABLE openalex_topic (
 	PRIMARY KEY (id), 
 	FOREIGN KEY(subfield_id) REFERENCES openalex_subfield (id)
 );
-

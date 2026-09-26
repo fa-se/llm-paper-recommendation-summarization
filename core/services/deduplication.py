@@ -1,9 +1,9 @@
 """Duplicate and junk detection for OpenAlex works.
 
-OpenAlex often holds the same paper under several IDs: Zenodo/figshare versions, preprint + journal version, translations.
-In the demo corpus (2026-09-26) that was ~12% of all works, and one paper took two of the top 5 slots after reranking.
-Two works count as duplicates if their normalized titles *or* their normalized abstracts are equal: versions often
-differ in only one of the two.
+OpenAlex often holds the same paper under several IDs: Zenodo/figshare versions, preprint + journal version,
+translations. In the demo corpus (2026-09-26) that was ~12% of all works, and one paper took two of the top 5 slots
+after reranking. Two works count as duplicates if their normalized titles *or* their normalized abstracts are equal:
+versions often differ in only one of the two.
 """
 
 import hashlib

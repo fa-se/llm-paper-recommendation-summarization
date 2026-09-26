@@ -1,7 +1,7 @@
 """Demo queries for the botario team talk (2026-09-28), and a script that pre-ingests their corpus.
 
 Pre-ingesting before the demo avoids the minutes-long OpenAlex fetch + embedding step during the live run.
-Usage (with a running db): uv run --env-file .env setup/demo_queries.py [--limit 2000] [--measure]
+Usage (with a running db): uv run --env-file .env scripts/demo_queries.py [--limit 2000] [--measure]
 """
 
 import argparse
@@ -9,7 +9,8 @@ import logging
 import time
 from datetime import datetime
 
-from core import retrieval
+import core
+from core.instrumentation import Trace
 
 START_DATE = datetime(2025, 1, 1)
 
@@ -29,27 +30,28 @@ DEMO_QUERIES = {
 
 
 def measure_latency(query: str, n: int = 5):
-    """Times the live part of the pipeline: hybrid search + OpenAlex hydration, then setwise reranking."""
+    """Times the live part of the pipeline: hybrid search, then setwise reranking."""
     t = time.perf_counter()
-    candidates = retrieval.get_relevant_works_for_query(query, n=n * 10, start_date=START_DATE, rerank=False)
+    candidates = core.retrieval.search(query, n=n * 10, start_date=START_DATE, rerank=False)
     t_hybrid = time.perf_counter() - t
     t = time.perf_counter()
-    top = retrieval._rerank(query, candidates, k=n)
+    top = core.retrieval.rerank(query, candidates, k=n)
     t_rerank = time.perf_counter() - t
-    print(f"  hybrid search + hydration: {t_hybrid:.1f}s, rerank top {n} of {len(candidates)}: {t_rerank:.1f}s")
+    print(f"  hybrid search: {t_hybrid:.1f}s, rerank top {n} of {len(candidates)}: {t_rerank:.1f}s")
     for work in top[:n]:
         print(f"    {work.title}")
 
 
 def main(limit: int, num_topics: int, measure: bool):
-    for name, query in DEMO_QUERIES.items():
-        t = time.perf_counter()
-        topics, added = retrieval.initialize_for_query(query, START_DATE, limit=limit, num_topics=num_topics)
-        print(f"[{name}] added {len(added)} works from {len(topics)} topics in {time.perf_counter() - t:.1f}s")
-        print("  topics: " + "; ".join(topic.name for topic in topics))
-        if measure:
-            measure_latency(query)
-    print(f"Tracked OpenAI cost: ${retrieval.llm_interface.accumulated_costs:.4f}")
+    with Trace() as trace:
+        for name, query in DEMO_QUERIES.items():
+            t = time.perf_counter()
+            topics, added = core.retrieval.ingest(query, START_DATE, limit=limit, num_topics=num_topics)
+            print(f"[{name}] added {len(added)} works from {len(topics)} topics in {time.perf_counter() - t:.1f}s")
+            print("  topics: " + "; ".join(topic.name for topic in topics))
+            if measure:
+                measure_latency(query)
+    print(f"Tracked OpenAI cost: ${trace.usage['cost_usd']:.4f}")
 
 
 if __name__ == "__main__":

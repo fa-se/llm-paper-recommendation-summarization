@@ -2,7 +2,7 @@
 
 The saved trace can be replayed without DB or API keys (core.instrumentation.replay), e.g. as the demo's fallback.
 Usage (with a running db):
-    uv run --env-file .env setup/trace_run.py rag_hallucinations [--ingest] [--summaries 3] [--out traces/rag.json]
+    uv run --env-file .env scripts/trace_run.py rag_hallucinations [--ingest] [--summaries 3] [--out traces/rag.json]
 """
 
 import argparse
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from core import retrieval, summarization
 from core.instrumentation import Trace
-from setup.demo_queries import DEMO_QUERIES, START_DATE
+from scripts.demo_queries import DEMO_QUERIES, START_DATE
 
 
 def print_stages(trace: Trace):
@@ -34,10 +34,10 @@ def main(name: str, ingest: bool, n: int, summaries: int, out: str | None):
     with Trace() as trace:
         trace.emit("run_start", query_name=name, query=query, start_date=START_DATE.date().isoformat(), n=n)
         if ingest:
-            retrieval.initialize_for_query(query, START_DATE, limit=2000, num_topics=10)
-        works = retrieval.get_relevant_works_for_query(query, n=n, start_date=START_DATE)
+            retrieval.ingest(query, START_DATE, limit=2000, num_topics=10)
+        works = retrieval.search(query, n=n, start_date=START_DATE)
         if summaries:
-            summarization.summarize_works_for_query(query, works[:summaries])
+            summarization.summarize(query, works[:summaries])
         trace.emit("run_end", top=[work.id for work in works[:n]])
 
     print_stages(trace)

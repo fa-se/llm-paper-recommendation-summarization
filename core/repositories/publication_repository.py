@@ -1,96 +1,76 @@
 from datetime import datetime
 
-from sqlalchemy import select, desc, text, func
+from sqlalchemy import desc, func, select, text
+from sqlalchemy.orm import Session, scoped_session
 
 from core.services.deduplication import text_key
 from core.sqlalchemy_models import Publication
-from db import Session
+from core.works import Work
+
+# OpenAlex ID -> score, best first
+type Ranking = dict[int, float]
 
 
 class PublicationRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session | scoped_session[Session]):
         self.session = session
 
-    def commit(self):
-        self.session.commit()
-
-    def create(
-        self,
-        openalex_id: int,
-        title: str,
-        authors: list[str],
-        abstract: str,
-        published: datetime,
-        accessed: datetime,
-        embedding: list[float],
-    ) -> Publication:
+    def add(self, work: Work, embedding: list[float], accessed: datetime) -> Publication:
         publication = Publication(
-            openalex_id=openalex_id,
-            title=title,
-            authors=authors,
-            abstract=abstract,
-            publication_datetime_utc=published,
+            openalex_id=work.id,
+            title=work.title,
+            authors=work.authors,
+            abstract=work.abstract,
+            publication_datetime_utc=work.publication_date,
             accessed_datetime_utc=accessed,
             embedding=embedding,
-            title_key=text_key(title),
-            abstract_key=text_key(abstract),
+            title_key=text_key(work.title),
+            abstract_key=text_key(work.abstract),
         )
         self.session.add(publication)
         return publication
 
-    def get_by_openalex_id(self, openalex_id: int) -> Publication:
-        return self.session.query(Publication).filter(Publication.openalex_id == openalex_id).one_or_none()
+    def commit(self):
+        self.session.commit()
+
+    def count(self) -> int:
+        return self.session.scalar(select(func.count()).select_from(Publication))
 
     def get_by_openalex_ids(self, openalex_ids: list[int]) -> list[Publication]:
         """Returns the publications in the order of the given IDs, skipping unknown IDs."""
-        publications = self.session.query(Publication).filter(Publication.openalex_id.in_(openalex_ids)).all()
+        publications = self.session.scalars(select(Publication).where(Publication.openalex_id.in_(openalex_ids)))
         by_id = {publication.openalex_id: publication for publication in publications}
         return [by_id[openalex_id] for openalex_id in openalex_ids if openalex_id in by_id]
 
-    def get_titles_by_openalex_ids(self, openalex_ids: list[int]) -> dict[int, str]:
+    def get_titles(self, openalex_ids: list[int]) -> dict[int, str]:
         query = select(Publication.openalex_id, Publication.title).where(Publication.openalex_id.in_(openalex_ids))
         return dict(self.session.execute(query).all())
 
-    def get_all_openalex_ids(self) -> list[int]:
-        results = self.session.query(Publication.openalex_id).all()
-        return [result[0] for result in results]
+    def get_all_openalex_ids(self) -> set[int]:
+        return set(self.session.scalars(select(Publication.openalex_id)))
 
     def get_all_dedupe_keys(self) -> tuple[list[str], list[str]]:
         """Returns the title keys and the abstract keys of all publications."""
-        results = self.session.query(Publication.title_key, Publication.abstract_key).all()
-        return [title_key for title_key, _ in results if title_key], [abstract_key for _, abstract_key in results if abstract_key]
+        rows = self.session.execute(select(Publication.title_key, Publication.abstract_key)).all()
+        title_keys = [title_key for title_key, _ in rows if title_key]
+        abstract_keys = [abstract_key for _, abstract_key in rows if abstract_key]
+        return title_keys, abstract_keys
 
-    def get_random_publications(self, n: int) -> list[Publication]:
-        query = self.session.query(Publication).order_by(func.random()).limit(n)
-        return query.all()
-
-    def get_openalex_ids_by_embedding_similarity(
-        self, embedding: list[float], top_n: int, start_date: datetime = None
-    ) -> tuple[list[int], list[float]]:
-        # Query to find the n most similar topics with similarity score (cosine similarity)
-        query = select(
-            Publication.openalex_id, (1 - Publication.embedding.cosine_distance(embedding)).label("similarity")
-        )
+    def search_by_embedding(self, embedding: list[float], n: int, start_date: datetime | None = None) -> Ranking:
+        """The n publications with the highest cosine similarity to the embedding (exact search, no index)."""
+        similarity = (1 - Publication.embedding.cosine_distance(embedding)).label("similarity")
+        query = select(Publication.openalex_id, similarity)
         if start_date is not None:
             query = query.where(Publication.publication_datetime_utc >= start_date)
-        query = query.order_by(desc("similarity")).limit(top_n)
+        query = query.order_by(desc("similarity")).limit(n)
+        return dict(self.session.execute(query).all())
 
-        results = self.session.execute(query).all()
-
-        ids = [result.openalex_id for result in results]
-        similarities = [result.similarity for result in results]
-
-        return ids, similarities
-
-    def get_openalex_ids_by_bm25_similarity(
-        self, query: str, top_n: int, start_date: datetime = None
-    ) -> tuple[list[int], list[float]]:
-        start_date_filter = ""
-        if start_date is not None:
-            start_date_filter = "AND publication_datetime_utc >= :start_date"
-
-        # MATERIALIZED: tokenize the query once, not once per row (for a paragraph-long query, 2 s -> 10 ms)
-        query_raw = f"""
+    def search_by_bm25(self, query: str, n: int, start_date: datetime | None = None) -> Ranking:
+        """The n publications whose abstracts have the highest BM25 score for the query (pg_bestmatch)."""
+        start_date_filter = "AND publication_datetime_utc >= :start_date" if start_date is not None else ""
+        # MATERIALIZED: tokenize the query once, not once per row (for a paragraph-long query, 2 s -> 10 ms).
+        # <#> is pgvector's negative inner product.
+        sql = f"""
         WITH query_vector AS MATERIALIZED (
             SELECT bm25_query_to_svector('publication_abstract_bm25', :query, 'pgvector')::sparsevec AS bm25
         )
@@ -104,56 +84,33 @@ class PublicationRepository:
         WHERE score != double precision 'NaN'
         {start_date_filter}
         ORDER BY score DESC
-        LIMIT :top_n;
+        LIMIT :n;
         """
-
-        query_text = text(query_raw)
-        params = {"query": query, "top_n": top_n}
+        params = {"query": query, "n": n}
         if start_date is not None:
             params["start_date"] = start_date
-
-        results = self.session.execute(query_text, params).fetchall()
-
-        ids = [result[0] for result in results]
-        scores = [result[1] for result in results]
-
-        return ids, scores
+        return dict(self.session.execute(text(sql), params).all())
 
     def rebuild_bm25(self):
-        # First, check if the materialized statistics view already exists
-        view_exists = self.session.execute(
-            text("""
-                SELECT EXISTS (
-                    SELECT FROM pg_matviews 
-                    WHERE schemaname = 'public' AND matviewname = 'publication_abstract_bm25'
-                );
-                """)
-        ).scalar()
-        if view_exists:
-            # refresh
-            self.session.execute(
-                text("""
-                SELECT bm25_refresh('publication_abstract_bm25');
-                """)
-            )
-        else:
-            self.session.execute(
-                text("""
-                SELECT bm25_create('publication', 'abstract', 'publication_abstract_bm25'); 
-                """)
-            )
+        """Updates the BM25 statistics (a materialized view of pg_bestmatch) and every publication's BM25 vector.
 
-        self.session.execute(
-            text("""
-            UPDATE publication
-            SET bm25 = bm25_document_to_svector('publication_abstract_bm25', abstract, 'pgvector')::sparsevec;
-            """)
+        All vectors, not only the new publications' ones: a document vector depends on the corpus statistics (average
+        document length), which change with every ingest.
+        """
+        view_exists = self.session.scalar(
+            text(
+                "SELECT EXISTS (SELECT FROM pg_matviews "
+                "WHERE schemaname = 'public' AND matviewname = 'publication_abstract_bm25')"
+            )
         )
-        self.commit()
-
-    def count(self) -> int:
-        return self.session.query(Publication).count()
-
-    def truncate(self):
-        self.session.query(Publication).delete()
+        if view_exists:
+            self.session.execute(text("SELECT bm25_refresh('publication_abstract_bm25')"))
+        else:
+            self.session.execute(text("SELECT bm25_create('publication', 'abstract', 'publication_abstract_bm25')"))
+        self.session.execute(
+            text(
+                "UPDATE publication "
+                "SET bm25 = bm25_document_to_svector('publication_abstract_bm25', abstract, 'pgvector')::sparsevec"
+            )
+        )
         self.commit()

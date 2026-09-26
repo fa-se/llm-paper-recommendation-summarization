@@ -1,3 +1,10 @@
-target-version = "py314"
-
+# target-version: inferred from requires-python in pyproject.toml
 line-length = 120
+
+[lint]
+# pycodestyle, pyflakes, isort, pyupgrade, bugbear, simplify, ruff-specific
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[lint.per-file-ignores]
+# prompt text, kept exactly as evaluated in the thesis
+"core/llm_interfaces/tasks.py" = ["E501"]

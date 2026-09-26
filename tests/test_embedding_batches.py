@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import tiktoken
 
+from core.config import Settings
 from core.llm_interfaces.openai import OpenAIInterface
 
 ENCODING = tiktoken.get_encoding("cl100k_base")
@@ -24,9 +25,8 @@ class FakeEmbeddings:
 
 class EmbeddingBatchTest(unittest.TestCase):
     def setUp(self):
-        self.interface = OpenAIInterface()
         self.fake = FakeEmbeddings()
-        self.interface.client = SimpleNamespace(embeddings=self.fake)
+        self.interface = OpenAIInterface(Settings.from_env({}), client=SimpleNamespace(embeddings=self.fake))
         self.interface.embedding_max_tokens_per_input = 20
         self.interface.embedding_max_inputs_per_request = 3
         self.interface.embedding_max_request_size = 30
@@ -38,7 +38,8 @@ class EmbeddingBatchTest(unittest.TestCase):
         for request in self.fake.requests:
             self.assertLessEqual(len(request), 3)
             self.assertLessEqual(sum(-(-len(text.encode()) // 4) for text in request), 30)
-        # greedy packing by size estimate (bytes / 4): [8, 18, 2] (input limit), [14, 14], [14, 3, 3] (input limit), [3, 3]
+        # greedy packing by size estimate (bytes / 4):
+        # [8, 18, 2] (input limit), [14, 14], [14, 3, 3] (input limit), [3, 3]
         self.assertEqual([len(request) for request in self.fake.requests], [3, 2, 3, 2])
 
     def test_long_texts_are_truncated_not_dropped(self):

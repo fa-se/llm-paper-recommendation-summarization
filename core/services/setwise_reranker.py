@@ -17,10 +17,10 @@ import logging
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 
-from core.dataclasses.data_classes import Work
 from core.instrumentation import current_trace, submit_in_context
 from core.llm_interfaces import LLMInterface
 from core.llm_interfaces.tasks import SetwiseComparisonTask
+from core.works import Work
 
 logger = logging.getLogger(__name__)
 
@@ -133,8 +133,8 @@ class _HeapsortRun:
             for candidate in level:
                 children = self.children(candidate, size)
                 if children and candidate not in pending:
-                    positions = [candidate] + children
-                    docs = [sinking] + [self.heap[child] for child in children]
+                    positions = [candidate, *children]
+                    docs = [sinking, *(self.heap[child] for child in children)]
                     pending[candidate] = submit_in_context(
                         self.llm_pool, self.compare, positions, docs, speculative=candidate != node
                     )

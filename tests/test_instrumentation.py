@@ -10,11 +10,10 @@ from core.instrumentation import Trace, current_trace, load_events, replay
 
 class TraceTest(unittest.TestCase):
     def test_usage_is_attributed_to_all_open_stages(self):
-        with Trace() as trace:
-            with trace.stage("outer"):
-                current_trace().record_llm_call("m", 10, 2, 0.5, 0.1)
-                with trace.stage("inner"):
-                    current_trace().record_llm_call("m", 5, 1, 0.25, 0.1)
+        with Trace() as trace, trace.stage("outer"):
+            current_trace().record_llm_call("m", 10, 2, 0.5, 0.1)
+            with trace.stage("inner"):
+                current_trace().record_llm_call("m", 5, 1, 0.25, 0.1)
         ends = {event["stage"]: event for event in trace.events if event["type"] == "stage_end"}
         self.assertEqual(
             (ends["inner"]["llm_calls"], ends["inner"]["input_tokens"], ends["inner"]["cost_usd"]), (1, 5, 0.25)
@@ -26,13 +25,12 @@ class TraceTest(unittest.TestCase):
 
     def test_events_from_threads_are_ordered_and_tagged_with_the_stage(self):
         seen = []
-        with Trace(on_event=seen.append) as trace:
-            with trace.stage("work"):
-                threads = [threading.Thread(target=trace.emit, args=("tick",), kwargs={"i": i}) for i in range(50)]
-                for thread in threads:
-                    thread.start()
-                for thread in threads:
-                    thread.join()
+        with Trace(on_event=seen.append) as trace, trace.stage("work"):
+            threads = [threading.Thread(target=trace.emit, args=("tick",), kwargs={"i": i}) for i in range(50)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
         self.assertEqual([event["seq"] for event in seen], list(range(len(seen))))
         self.assertTrue(all(event["stage"] == "work" for event in seen if event["type"] == "tick"))
 

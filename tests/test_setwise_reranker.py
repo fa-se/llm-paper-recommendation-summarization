@@ -44,7 +44,7 @@ def reference_heapsort(passages: list[str], k: int, choose, num_child: int = 2) 
 
     def heapify(n, i):
         if num_child * i + 1 < n:
-            inds = [i] + list(range(num_child * i + 1, min(num_child * (i + 1) + 1, n)))
+            inds = [i] + list(range(num_child * i + 1, min(num_child * (i + 1) + 1, n)))  # noqa: RUF005 (as in llm-rankers)
             largest = inds[choose([arr[j] for j in inds])]
             if largest != i:
                 arr[i], arr[largest] = arr[largest], arr[i]
@@ -56,7 +56,7 @@ def reference_heapsort(passages: list[str], k: int, choose, num_child: int = 2) 
         heapify(n, i)
     for i in range(n - 1, 0, -1):
         arr[i], arr[0] = arr[0], arr[i]
-        ranked += 1
+        ranked += 1  # noqa: SIM113 (as in llm-rankers)
         if ranked == k:
             break
         heapify(i, 0)

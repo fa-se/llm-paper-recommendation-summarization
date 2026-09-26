@@ -2,16 +2,17 @@
 
 New ingests skip such works themselves (see core/services/deduplication.py); this cleans up rows ingested before.
 Of each group of duplicates, the row ingested first is kept. Safe to run repeatedly.
-Usage (with a running db): uv run --env-file .env setup/dedupe_publications.py [--dry-run]
+Usage (with a running db): uv run --env-file .env scripts/dedupe_publications.py [--dry-run]
 """
 
 import argparse
 
 from sqlalchemy import text
 
+from core.config import Settings
+from core.database import create_session
 from core.repositories.publication_repository import PublicationRepository
 from core.services.deduplication import MIN_ABSTRACT_WORDS, DuplicateFilter, has_usable_abstract, text_key
-from db import Session
 
 MIGRATION = [
     "ALTER TABLE publication ADD COLUMN IF NOT EXISTS title_key VARCHAR(40)",
@@ -22,7 +23,7 @@ MIGRATION = [
 
 
 def main(dry_run: bool):
-    session = Session()
+    session = create_session(Settings.from_env())
     for statement in MIGRATION:
         session.execute(text(statement))
 

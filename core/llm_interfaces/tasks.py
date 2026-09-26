@@ -1,65 +1,27 @@
+"""The prompts of the pipeline: setwise reranking comparisons and tailored summaries."""
+
 import json
 import re
 import string
 import textwrap
 
-from .base import LLMType, Message, Task
+from .base import Message, Task
 
 
-class AlignToExamplesTask(Task):
-    """
-    Task to align the input to match the structure of the provided example(s).
-    Example use case: Rewrite user provided text to improve embedding similarity search by matching the structure used to generate the embeddings.
-    """
+class TailoredSummaryTask(Task):
+    """A summary of a publication tailored to the user's research interests: their focus, their terminology.
 
-    prompt_templates = {
-        LLMType.GPT: {
-            "system": Message(
-                "system",
-                "You will be provided with a free form text for which embeddings will be created at a later stage. "
-                "In order to improve embedding similarity search, the input needs to be aligned with the input used "
-                "to generate the embeddings. Your task is to align the input to the structure of the following examples, "
-                "while preserving its meaning. In your answers, respond only with the resulting aligned text.\n\n"
-                "{examples}",
-            ),
-            "user": Message("user", "{input_text}"),
-        }
-    }
+    The prompt follows Self-Discover (Zhou et al. 2024): the model fills out a reasoning structure step by step, ending
+    with the summary as FINAL_ANSWER. The structure was generated offline with Self-Discover on example pairs, then
+    merged by hand and frozen.
 
-    def __init__(self, input_text: str, examples: list[str], prioritize_quality: bool = True):
-        """
-        Parameters:
-            input_text: Input text to be aligned.
-            examples: List of example texts to align the input to.
-            prioritize_quality: Indicates whether to prioritize quality over cost for this task, e.g. by using larger models.
-        """
-        super().__init__(prioritize_quality=prioritize_quality)
-
-        self.input = input_text
-        self.examples = examples
-
-    def get_prompt(self, llm_type: LLMType) -> [Message]:
-        """
-        Generate the prompt for the specified LLMType.
-
-        Parameters:
-            llm_type (LLMType): The LLM type to specify which template to use.
-
-        Returns:
-            list[Message]: The messages representing the prompt for the specified LLM type.
-        """
-        template = self.prompt_templates[llm_type]
-        system_message = template["system"].format(examples="\n".join(self.examples))
-        user_message = template["user"].format(input_text=self.input)
-        return [system_message, user_message]
-
-
-class CustomizedSummaryTask(Task):
-    """
-    Task to generate a summary of the input, customized to the user's area of interest.
+    The prompt text is exactly the one evaluated in the thesis, including its quirks (odd indentation, no step 4, a
+    missing space in the system prompt, the code block instruction that structured outputs now make moot).
     """
 
-    self_discover_prompt_templates = string.Template(
+    model_tier = "quality"
+
+    self_discover_prompt_template = string.Template(
         textwrap.dedent("""# Given Reasoning Structure
 
             ```json
@@ -127,47 +89,29 @@ class CustomizedSummaryTask(Task):
     }
     """
 
-    prompt_templates = {
-        LLMType.GPT: {
-            "system": Message(
-                "system",
-                "You are a helpful AI chatbot who pays very close attention to instructions"
-                "from the user - especially any instructions on how to format your response.",
-            )
-        }
-    }
+    # (sic) no space between "instructions" and "from"
+    system_prompt = (
+        "You are a helpful AI chatbot who pays very close attention to instructions"
+        "from the user - especially any instructions on how to format your response."
+    )
 
-    def __init__(self, area_of_research: str, abstract: str, prioritize_quality: bool = True):
+    def __init__(self, research_interests: str, abstract: str):
         """
         Parameters:
-            area_of_research: Description of the area of research to which the summary should be customized.
-            abstract: Abstract of the publication to summarize.
+            research_interests: the user's free-form description of their research interests (the query).
+            abstract: abstract of the publication to summarize.
         """
-        super().__init__(prioritize_quality=prioritize_quality)
-
-        self.area_of_research = area_of_research
+        self.research_interests = research_interests
         self.abstract = abstract
 
-    def get_prompt(self, llm_type: LLMType) -> [Message]:
-        """
-        Generate the prompt for the specified LLMType.
-
-        Parameters:
-            llm_type (LLMType): The LLM type to specify which template to use.
-
-        Returns:
-            list[Message]: The messages representing the prompt for the specified LLM type.
-        """
-        template = self.prompt_templates[llm_type]
-        system_message = template["system"].format(area_of_interest_description=self.area_of_research)
+    def messages(self) -> list[Message]:
         task = self.task_template.substitute(
-            research_interest_description=self.area_of_research, abstract=self.abstract
+            research_interest_description=self.research_interests, abstract=self.abstract
         )
-        prompt = self.self_discover_prompt_templates.substitute(reasoning_structure=self.reasoning_structure, task=task)
-        user_message = Message("user", prompt)
-        return [system_message, user_message]
+        prompt = self.self_discover_prompt_template.substitute(reasoning_structure=self.reasoning_structure, task=task)
+        return [Message("system", self.system_prompt), Message("user", prompt)]
 
-    def get_response_format(self, llm_type: LLMType) -> dict | None:
+    def response_format(self) -> dict:
         # Structured outputs guarantee a complete reasoning structure (they replace the code block the prompt asks for).
         # The schema keeps the template's key order, so the model still works through the steps before FINAL_ANSWER.
         schema = _json_schema_for_template(json.loads(self.reasoning_structure))
@@ -191,30 +135,27 @@ def _json_schema_for_template(template: dict | str) -> dict:
 
 
 class SetwiseComparisonTask(Task):
-    """
-    One comparison of setwise LLM reranking: which of the passages is the most relevant to the query?
+    """One comparison of setwise LLM reranking: which of the passages is the most relevant to the query?
+
     Prompt of llm-rankers' OpenAiSetwiseLlmRanker (https://github.com/ielab/llm-rankers), which the thesis used.
     """
+
+    model_tier = "rerank"
+    temperature = 0.0
+    # a comparison normally takes ~1s; retry a stuck request early instead of stalling the whole ranking
+    timeout = 15.0
 
     labels = "ABCDEFGHIJKLMNOPQRSTUVW"
     system_prompt = (
         "You are RankGPT, an intelligent assistant specialized in selecting the most relevant passage from a pool of "
         "passages based on their relevance to the query."
     )
-    temperature = 0.0
-    # a comparison normally takes ~1s; retry a stuck request early instead of stalling the whole ranking
-    timeout = 15.0
 
     def __init__(self, query: str, passages: list[str]):
-        super().__init__(prioritize_quality=False)
         self.query = query
         self.passages = passages
 
-    @property
-    def model_tier(self) -> str:
-        return "rerank"
-
-    def get_prompt(self, llm_type: LLMType) -> [Message]:
+    def messages(self) -> list[Message]:
         passages = "\n\n".join(f'Passage {self.labels[i]}: "{passage}"' for i, passage in enumerate(self.passages))
         prompt = (
             f'Given a query "{self.query}", which of the following passages is the most relevant one to the query?\n\n'
