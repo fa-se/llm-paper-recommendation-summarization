@@ -10,6 +10,7 @@ from core.dataclasses.data_classes import Work, ScoredWork
 from core.llm_interfaces import LLMInterface
 from core.repositories.publication_repository import PublicationRepository
 from core.repositories.topic_repository import TopicRepository
+from core.services.deduplication import DuplicateFilter, has_usable_abstract
 from core.sqlalchemy_models.openalex.topic import Topic
 
 # from core.services.user_service import UserService
@@ -147,20 +148,19 @@ class PublicationService:
         works = get_works_by_topics(topic_ids, start_date, require_abstract=True, n_max=limit)
         access_timestamp = datetime.datetime.now()
 
-        # skip works that have already been embedded
-        known_works = self.publication_repository.get_all_openalex_ids()
-        works_to_be_added = [work for work in works if work.id not in known_works]
+        # skip works that have already been embedded, duplicates of those, and works without a real abstract
+        known_works = set(self.publication_repository.get_all_openalex_ids())
+        new_works = [work for work in works if work.id not in known_works]
+        usable_works = [work for work in new_works if has_usable_abstract(work.abstract)]
+        duplicate_filter = DuplicateFilter(*self.publication_repository.get_all_dedupe_keys())
+        works_to_be_added = [work for work in usable_works if duplicate_filter.is_new(work.title, work.abstract)]
 
         logger.info(
-            f"Embedding {len(works_to_be_added)} works. {len(works) - len(works_to_be_added)} works were already present."
+            f"Embedding {len(works_to_be_added)} works. Skipped {len(works) - len(new_works)} already present, "
+            f"{len(new_works) - len(usable_works)} without a usable abstract, "
+            f"{len(usable_works) - len(works_to_be_added)} duplicates."
         )
-        # embed abstracts
-        abstracts = []
-        for work in works_to_be_added:
-            if work.abstract:
-                abstracts.append(work.abstract)
-            else:
-                raise ValueError(f"Work {work} has no abstract, but the abstract is required for embedding.")
+        abstracts = [work.abstract for work in works_to_be_added]
 
         works_processed = 0
         for i in range(0, len(works_to_be_added), 2000):
@@ -180,7 +180,8 @@ class PublicationService:
             works_processed += len(embeddings)
             logger.info(f"Progress: {works_processed} out of {len(works_to_be_added)} works embedded.")
 
-        self.publication_repository.rebuild_bm25()
+        if works_to_be_added:
+            self.publication_repository.rebuild_bm25()
         logger.info(f"Finished initialization. Added {len(works_to_be_added)} works.")
         return topics, works_to_be_added
 

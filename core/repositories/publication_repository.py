@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import select, desc, text, func
 
+from core.services.deduplication import text_key
 from core.sqlalchemy_models import Publication
 from db import Session
 
@@ -31,6 +32,8 @@ class PublicationRepository:
             publication_datetime_utc=published,
             accessed_datetime_utc=accessed,
             embedding=embedding,
+            title_key=text_key(title),
+            abstract_key=text_key(abstract),
         )
         self.session.add(publication)
         return publication
@@ -41,6 +44,11 @@ class PublicationRepository:
     def get_all_openalex_ids(self) -> list[int]:
         results = self.session.query(Publication.openalex_id).all()
         return [result[0] for result in results]
+
+    def get_all_dedupe_keys(self) -> tuple[list[str], list[str]]:
+        """Returns the title keys and the abstract keys of all publications."""
+        results = self.session.query(Publication.title_key, Publication.abstract_key).all()
+        return [title_key for title_key, _ in results if title_key], [abstract_key for _, abstract_key in results if abstract_key]
 
     def get_random_publications(self, n: int) -> list[Publication]:
         query = self.session.query(Publication).order_by(func.random()).limit(n)

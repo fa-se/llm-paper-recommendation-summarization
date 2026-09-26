@@ -24,9 +24,14 @@ CREATE TABLE publication (
 	abstract VARCHAR, 
 	bm25 SPARSEVEC, 
 	embedding VECTOR(1024) NOT NULL, 
+	title_key VARCHAR(40), 
+	abstract_key VARCHAR(40), 
 	PRIMARY KEY (id), 
 	UNIQUE (openalex_id)
 );
+
+CREATE INDEX ix_publication_title_key ON publication (title_key);
+CREATE INDEX ix_publication_abstract_key ON publication (abstract_key);
 
 
 CREATE TABLE openalex_field (

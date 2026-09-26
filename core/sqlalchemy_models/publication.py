@@ -19,3 +19,6 @@ class Publication(Base):
     abstract: Mapped[str] = mapped_column(String, nullable=True)
     bm25: Mapped[list[float]] = mapped_column(SPARSEVEC, nullable=True)
     embedding: Mapped[list[float]] = mapped_column(Vector(1024))
+    # hashes of the normalized title and abstract, used to skip duplicates (see core/services/deduplication.py)
+    title_key: Mapped[str] = mapped_column(String(40), nullable=True, index=True)
+    abstract_key: Mapped[str] = mapped_column(String(40), nullable=True, index=True)

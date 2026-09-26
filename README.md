@@ -45,6 +45,9 @@ see [usage_example.ipynb](usage_example.ipynb) or
 2. Load OpenAlex embeddings for topic matching via `setup/openalex_embeddings.sql`.\
    E.g. `psql -U [DB_USER] -d [DB_NAME] -f setup/openalex_embeddings.sql`
 
+A database created before duplicate detection was added needs a one-off migration, which also removes the duplicates
+and junk abstracts already stored: `python setup/dedupe_publications.py [--dry-run]`.
+
 ### Setup Instructions
 1. Copy `.env.example` to `.env` and fill in the required values (database connection parameters, OpenAI API key, etc).
 2. Create the shared Docker network via `docker network create postgres_network`. The compose file uses it as an
