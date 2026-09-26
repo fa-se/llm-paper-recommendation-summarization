@@ -85,14 +85,18 @@ class PublicationRepository:
         if start_date is not None:
             start_date_filter = "AND publication_datetime_utc >= :start_date"
 
+        # MATERIALIZED: tokenize the query once, not once per row (for a paragraph-long query, 2 s -> 10 ms)
         query_raw = f"""
+        WITH query_vector AS MATERIALIZED (
+            SELECT bm25_query_to_svector('publication_abstract_bm25', :query, 'pgvector')::sparsevec AS bm25
+        )
         SELECT openalex_id, score
         FROM
         (
             SELECT openalex_id, publication.publication_datetime_utc,
-                    -(bm25 <#> bm25_query_to_svector('publication_abstract_bm25', :query, 'pgvector')::sparsevec) AS score
-            FROM publication
-        ) subquery   
+                    -(publication.bm25 <#> query_vector.bm25) AS score
+            FROM publication, query_vector
+        ) subquery
         WHERE score != double precision 'NaN'
         {start_date_filter}
         ORDER BY score DESC
