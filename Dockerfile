@@ -1,15 +1,15 @@
-# Use an official Python runtime as a parent image
 FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:0.12.1 /uv /uvx /bin/
 
-# Install git (so that we can install python packages from github via pip)
-RUN apt-get update && apt-get install -y git
-
-# Set the working directory in the container
 WORKDIR /usr/src/app
-# And make sure Python knows about it
-ENV PYTHONPATH="${PYTHONPATH}:/usr/src/app"
-# Copy the current directory contents into the container at /usr/src/app
-COPY . .
+# The venv lives outside /usr/src/app, which docker compose mounts over with the working copy.
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH"
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# dependencies first, so that code changes don't invalidate this layer
+COPY pyproject.toml uv.lock .python-version ./
+RUN uv sync --frozen --no-install-project --python-preference only-system
+COPY . .
+RUN uv sync --frozen --python-preference only-system

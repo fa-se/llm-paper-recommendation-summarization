@@ -1,8 +1,8 @@
 """Runs the whole pipeline for a demo query under a Trace, prints time, tokens and cost per stage, and saves the events.
 
 The saved trace can be replayed without DB or API keys (core.instrumentation.replay), e.g. as the demo's fallback.
-Usage (with the env from .env and a running db):
-    python setup/trace_run.py rag_hallucinations [--ingest] [--summaries 3] [--out traces/rag.json]
+Usage (with a running db):
+    uv run --env-file .env setup/trace_run.py rag_hallucinations [--ingest] [--summaries 3] [--out traces/rag.json]
 """
 
 import argparse

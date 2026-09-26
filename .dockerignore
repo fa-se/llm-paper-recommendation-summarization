@@ -4,6 +4,12 @@
 
 # Virtual environment
 venv/
+.venv/
+
+# Thesis PDFs, evaluation pickles and notebook checkpoints (not needed in the image)
+*.pdf
+*.pkl
+.ipynb_checkpoints/
 
 # PyCharm project files
 .idea/

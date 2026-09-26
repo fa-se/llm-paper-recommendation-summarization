@@ -2,7 +2,7 @@
 
 New ingests skip such works themselves (see core/services/deduplication.py); this cleans up rows ingested before.
 Of each group of duplicates, the row ingested first is kept. Safe to run repeatedly.
-Usage (with the env from .env and a running db): python setup/dedupe_publications.py [--dry-run]
+Usage (with a running db): uv run --env-file .env setup/dedupe_publications.py [--dry-run]
 """
 
 import argparse

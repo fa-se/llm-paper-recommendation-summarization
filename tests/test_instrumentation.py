@@ -1,4 +1,4 @@
-"""Run from the repo root: python -m unittest tests.test_instrumentation"""
+"""Run from the repo root: uv run python -m unittest tests.test_instrumentation"""
 
 import os
 import tempfile

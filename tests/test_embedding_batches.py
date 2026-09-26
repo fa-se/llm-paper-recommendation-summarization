@@ -1,4 +1,4 @@
-"""Run from the repo root: python -m unittest tests.test_embedding_batches"""
+"""Run from the repo root: uv run python -m unittest tests.test_embedding_batches"""
 
 import unittest
 from types import SimpleNamespace

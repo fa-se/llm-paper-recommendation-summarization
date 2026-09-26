@@ -1,7 +1,7 @@
 """Demo queries for the botario team talk (2026-09-28), and a script that pre-ingests their corpus.
 
 Pre-ingesting before the demo avoids the minutes-long OpenAlex fetch + embedding step during the live run.
-Usage (with the env from .env and a running db): python setup/demo_queries.py [--limit 2000] [--measure]
+Usage (with a running db): uv run --env-file .env setup/demo_queries.py [--limit 2000] [--measure]
 """
 
 import argparse

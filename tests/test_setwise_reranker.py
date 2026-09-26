@@ -1,6 +1,6 @@
 """Checks that the concurrent setwise heapsort ranks exactly like the sequential one of llm-rankers.
 
-Run from the repo root: python -m unittest tests.test_setwise_reranker (no API calls, no DB)
+Run from the repo root: uv run python -m unittest tests.test_setwise_reranker (no API calls, no DB)
 """
 
 import hashlib

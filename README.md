@@ -36,7 +36,7 @@ see [usage_example.ipynb](usage_example.ipynb) or
 - PostgreSQL instance
     - with [pgvector](https://github.com/pgvector/pgvector) (tested with 0.7.2 and 0.8.0)
     - with [pg_bestmatch_rs](https://github.com/tensorchord/pg_bestmatch.rs) (for BM25, tested with 0.0.1)
-- Docker with Docker Compose
+- Docker with Docker Compose, or [uv](https://docs.astral.sh/uv/) to run it locally
 - OpenAI API key
 
 ### Preparing the Database
@@ -46,7 +46,7 @@ see [usage_example.ipynb](usage_example.ipynb) or
    E.g. `psql -U [DB_USER] -d [DB_NAME] -f setup/openalex_embeddings.sql`
 
 A database created before duplicate detection was added needs a one-off migration, which also removes the duplicates
-and junk abstracts already stored: `python setup/dedupe_publications.py [--dry-run]`.
+and junk abstracts already stored: `uv run --env-file .env setup/dedupe_publications.py [--dry-run]`.
 
 ### Setup Instructions
 1. Copy `.env.example` to `.env` and fill in the required values (database connection parameters, OpenAI API key, etc).
@@ -54,12 +54,15 @@ and junk abstracts already stored: `python setup/dedupe_publications.py [--dry-r
    external network, so that other containers can reach the database as well.
 3. Run `docker compose build` to obtain an image with the required dependencies.
 
-Without Docker, install the dependencies into a Python 3.12 virtual environment: `requirements.txt` lists them
-unpinned, `requirements.lock` pins the versions last tested.
+Without Docker: `uv sync` creates `.venv` with the locked dependencies (`uv.lock`) and installs this project in editable
+mode. `uv run --env-file .env <script>` then runs a script with the environment from `.env`, e.g.
+`uv run --env-file .env setup/trace_run.py rag_hallucinations --summaries 3`, which prints time, tokens and cost per
+pipeline stage.
 
 ### Testing the Setup
 You can test the setup by running\
-`docker compose run --rm app bash -c "python3 setup/test.py 'llm rerankers'"`
+`docker compose run --rm app python setup/test.py 'llm rerankers'`\
+or, without Docker, `uv run --env-file .env setup/test.py 'llm rerankers'`
 
 This script tests all components of the system, including the database connection, database extensions, OpenAI and
 OpenAlex APIs, and the reranking model.
@@ -70,4 +73,4 @@ These papers will be stored in the database and then ranked w.r.t the FFTD using
 BM25). After reranking via *[setwise.heapsort](https://arxiv.org/abs/2310.09497v2)*, the top 5 results are printed. The top 3 are then summarized, and the
 summaries are printed.
 
-The unit tests need neither API keys nor a database: `python -m unittest discover -s tests -t .`
+The unit tests need neither API keys nor a database: `uv run python -m unittest discover -s tests -t .`
