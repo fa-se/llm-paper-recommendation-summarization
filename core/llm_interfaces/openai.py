@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from os import environ
 
@@ -66,6 +67,7 @@ class OpenAIInterface(LLMInterface):
         self.client = OpenAI(api_key=environ.get("OPENAI_API_KEY"), max_retries=6)
         # self.client = OpenAI(api_key=environ.get("OPENAI_API_KEY"), base_url="http://host.docker.internal:10080/v1")
         self.accumulated_costs = 0.0
+        self._costs_lock = threading.Lock()  # reranking and summarization call the API from several threads
         self.print_usage_info = print_usage_info
 
     def handle_task(self, task: Task) -> str:
@@ -91,7 +93,8 @@ class OpenAIInterface(LLMInterface):
         elif not isinstance(prices, dict):  # embedding models have a single price
             prices = {"input": prices, "output": 0.0}
         cost = (input_tokens * prices["input"]) + (output_tokens * prices["output"])
-        self.accumulated_costs += cost
+        with self._costs_lock:
+            self.accumulated_costs += cost
         current_trace().record_llm_call(model, input_tokens, output_tokens, cost, time.perf_counter() - started)
         return cost
 
@@ -123,34 +126,7 @@ class OpenAIInterface(LLMInterface):
         # merge provided config with defaults
         config = {**self.defaults, **config}
 
-        # the embedding api currently accepts a maximum of 8191 tokens per call, so we need to batch the input
-        max_tokens_per_batch = 8191
-        batches: list[list[str]] = []
-        current_batch: list[str] = []
-        total_tokens = 0
-        current_batch_tokens = 0
-        tiktoken_encoding = (
-            "cl100k_base"
-            if config["embedding_model"] in ["text-embedding-3-large", "text-embedding-3-small"]
-            else "cl100k_base"
-        )
-        for text in texts:
-            num_tokens = num_tokens_from_string(text, tiktoken_encoding)
-            if num_tokens > max_tokens_per_batch:
-                # TODO: How to handle this case? For now, add ' ' to batch, '' fails
-                current_batch.append(" ")
-                continue
-
-            if current_batch_tokens + num_tokens > max_tokens_per_batch:
-                batches.append(current_batch)
-                current_batch = []
-                current_batch_tokens = 0
-            current_batch.append(text)
-            current_batch_tokens += num_tokens
-            total_tokens += num_tokens
-
-        if current_batch:
-            batches.append(current_batch)
+        batches = self._embedding_batches(texts)
 
         embeddings: list[list[float]] = []
         used_tokens = 0
@@ -171,6 +147,38 @@ class OpenAIInterface(LLMInterface):
             )
 
         return embeddings
+
+    # limits of the embeddings endpoint (https://platform.openai.com/docs/api-reference/embeddings/create)
+    embedding_max_tokens_per_input = 8191
+    embedding_max_inputs_per_request = 2048
+    # A request may have 300,000 "tokens" over all inputs, but the endpoint estimates them as UTF-8 bytes / 4, not with
+    # the tokenizer: for the demo abstracts that's 23% more than cl100k_base counts (checked 2026-09-26).
+    embedding_max_request_size = 290_000
+
+    def _embedding_batches(self, texts: list[str]) -> list[list[str]]:
+        """Splits texts into as few requests as the limits allow; truncates texts that exceed the per-input limit."""
+        encoding = tiktoken.get_encoding("cl100k_base")  # the tokenizer of the text-embedding-3 models
+        batches: list[list[str]] = []
+        current_batch: list[str] = []
+        current_batch_size = 0
+        for text in texts:
+            tokens = encoding.encode(text)
+            if len(tokens) > self.embedding_max_tokens_per_input:
+                logger.warning(f"Truncating a text of {len(tokens)} tokens for embedding")
+                text = encoding.decode(tokens[: self.embedding_max_tokens_per_input])
+            size = -(-len(text.encode()) // 4)  # the endpoint's estimate, rounded up
+            if current_batch and (
+                current_batch_size + size > self.embedding_max_request_size
+                or len(current_batch) == self.embedding_max_inputs_per_request
+            ):
+                batches.append(current_batch)
+                current_batch = []
+                current_batch_size = 0
+            current_batch.append(text)
+            current_batch_size += size
+        if current_batch:
+            batches.append(current_batch)
+        return batches
 
     def create_completion(
         self,
@@ -210,13 +218,7 @@ class OpenAIInterface(LLMInterface):
                 Cost: ${cost:.2f}, Accumulated cost: ${self.accumulated_costs:.2f}"
             )
 
-        return response.choices[0].message.content.strip()
-
-
-# function to calculate the number of tokens in a string
-# taken from https://platform.openai.com/docs/guides/embeddings/how-can-i-tell-how-many-tokens-a-string-has-before-i-embed-it
-def num_tokens_from_string(string: str, encoding_name: str) -> int:
-    """Returns the number of tokens in a text string."""
-    encoding = tiktoken.get_encoding(encoding_name)
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
+        message = response.choices[0].message
+        if message.content is None:
+            raise ValueError(f"{model} returned no content (refusal: {message.refusal!r})")
+        return message.content.strip()

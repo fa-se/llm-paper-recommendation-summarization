@@ -1,7 +1,7 @@
-import json
+from concurrent.futures import ThreadPoolExecutor
 
 from core.dataclasses.data_classes import Work, SummarizedWork
-from core.instrumentation import current_trace
+from core.instrumentation import current_trace, submit_in_context
 from core.llm_interfaces import LLMInterface
 from core.llm_interfaces.tasks import CustomizedSummaryTask
 
@@ -13,24 +13,23 @@ class SummarizationService:
     ):
         self.llm_interface = llm_interface
 
-    def summarize_works_for_query(self, query: str, works: list[Work]) -> list[SummarizedWork]:
+    def summarize_works_for_query(self, query: str, works: list[Work], max_workers: int = 5) -> list[SummarizedWork]:
         # only consider works with abstracts
         works_with_abstracts = [work for work in works if work.abstract]
 
-        trace = current_trace()
-        summarized_works: list[SummarizedWork] = []
-        with trace.stage("summarize", works=len(works_with_abstracts)):
-            for work in works_with_abstracts:
-                task = CustomizedSummaryTask(
-                    area_of_research=query,
-                    abstract=work.abstract,
-                    prioritize_quality=True,
-                )
-                response = self.llm_interface.handle_task(task)
-                reasoning_structure_json = response.strip("```json").strip("```")
-                reasoning_structure = json.loads(reasoning_structure_json)["Reasoning Structure"]
-                summary = reasoning_structure["FINAL_ANSWER"]
-                trace.emit("summary", docid=work.id, summary=summary, reasoning=reasoning_structure)
-                summarized_works.append(SummarizedWork(work, summary))
+        # the summaries are independent, so they are generated concurrently (one takes several seconds)
+        with current_trace().stage("summarize", works=len(works_with_abstracts)):
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [submit_in_context(executor, self._summarize, query, work) for work in works_with_abstracts]
+                return [future.result() for future in futures]
 
-        return summarized_works
+    def _summarize(self, query: str, work: Work) -> SummarizedWork:
+        task = CustomizedSummaryTask(
+            area_of_research=query,
+            abstract=work.abstract,
+            prioritize_quality=True,
+        )
+        reasoning_structure = task.parse_response(self.llm_interface.handle_task(task))
+        summary = reasoning_structure["FINAL_ANSWER"]
+        current_trace().emit("summary", docid=work.id, summary=summary, reasoning=reasoning_structure)
+        return SummarizedWork(work, summary, reasoning_structure)

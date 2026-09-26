@@ -1,3 +1,4 @@
+import json
 import re
 import string
 import textwrap
@@ -72,9 +73,9 @@ class CustomizedSummaryTask(Task):
             ## Example Output 
             
             ```json
-            {{
+            {
               ...
-            }}
+            }
             ```
             
             # Detailed Instructions 
@@ -165,6 +166,28 @@ class CustomizedSummaryTask(Task):
         prompt = self.self_discover_prompt_templates.substitute(reasoning_structure=self.reasoning_structure, task=task)
         user_message = Message("user", prompt)
         return [system_message, user_message]
+
+    def get_response_format(self, llm_type: LLMType) -> dict | None:
+        # Structured outputs guarantee a complete reasoning structure (they replace the code block the prompt asks for).
+        # The schema keeps the template's key order, so the model still works through the steps before FINAL_ANSWER.
+        schema = _json_schema_for_template(json.loads(self.reasoning_structure))
+        return {"type": "json_schema", "json_schema": {"name": "reasoning_structure", "strict": True, "schema": schema}}
+
+    def parse_response(self, response: str) -> dict:
+        """The filled out reasoning structure; its FINAL_ANSWER is the summary."""
+        return json.loads(response)["Reasoning Structure"]
+
+
+def _json_schema_for_template(template: dict | str) -> dict:
+    """Strict JSON schema for a JSON template whose leaves are strings to fill out."""
+    if isinstance(template, dict):
+        return {
+            "type": "object",
+            "properties": {key: _json_schema_for_template(value) for key, value in template.items()},
+            "required": list(template),
+            "additionalProperties": False,
+        }
+    return {"type": "string"}
 
 
 class SetwiseComparisonTask(Task):

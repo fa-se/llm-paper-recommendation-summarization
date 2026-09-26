@@ -101,9 +101,11 @@ class ScoredWork:
 
 
 class SummarizedWork:
-    def __init__(self, work: Work, summary: str):
+    def __init__(self, work: Work, summary: str, reasoning: dict | None = None):
         self.work: Work = work
         self.summary: str = summary
+        # the filled out reasoning structure that led to the summary (key findings, methodologies, ...)
+        self.reasoning: dict | None = reasoning
 
     def __str__(self) -> str:
         return f"{self.work.title}\nSummary: {self.summary}"
