@@ -36,11 +36,26 @@ class Work:
         )
         self.cited_by_count = pyalex_work["cited_by_count"]
 
+    @classmethod
+    def from_publication(cls, publication) -> Self:
+        """A Work from a stored Publication; the DB doesn't keep topics, created date and citation count."""
+        work = cls.__new__(cls)
+        work.id = publication.openalex_id
+        work.title = publication.title
+        work.authors = publication.authors or []
+        work.abstract = publication.abstract
+        work.topics = {}
+        work.publication_date = publication.publication_datetime_utc
+        work.created_date = None
+        work.cited_by_count = None
+        return work
+
     def openalex_url(self) -> str:
         return f"https://openalex.org/W{self.id}"
 
     def __str__(self) -> str:
-        return f"'{self.title}' by [{', '.join(self.authors)}] ({self.publication_date:%Y-%m}) | # cited by: {self.cited_by_count} | {self.openalex_url()}"
+        cited_by = f" | # cited by: {self.cited_by_count}" if self.cited_by_count is not None else ""
+        return f"'{self.title}' by [{', '.join(self.authors)}] ({self.publication_date:%Y-%m}){cited_by} | {self.openalex_url()}"
 
     def __eq__(self, other: Self):
         return self.id == other.id

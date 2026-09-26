@@ -56,8 +56,10 @@ def get_works_by_openalex_ids(openalex_ids: list[str] | list[int]) -> list[Work]
         for pyalex_work in chain(*query.paginate(per_page=200, n_max=None)):
             works.append(Work(pyalex_work))
 
-    # because the API returns works in an arbitrary order, we need to restore the original order
-    works = sorted(works, key=lambda work: openalex_ids.index(work.id))
+    # because the API returns works in an arbitrary order, we need to restore the original order.
+    # OpenAlex may return a merged work under a different ID; those go last
+    order = {openalex_id: i for i, openalex_id in enumerate(openalex_ids)}
+    works = sorted(works, key=lambda work: order.get(work.id, len(order)))
     return works
 
 
@@ -208,8 +210,11 @@ class PublicationService:
         else:
             raise ValueError(f"Invalid search type {search_type}")
 
-        # now "hydrate" the works via the OpenAlex API
-        works = get_works_by_openalex_ids(work_ids)
+        # title, authors and abstract are stored at ingest, so no need to fetch the works from OpenAlex again
+        works = [
+            Work.from_publication(publication)
+            for publication in self.publication_repository.get_by_openalex_ids(work_ids)
+        ]
 
         if rerank:
             print(f"Reranking to identify top {n} among {len(work_ids)} publications.")

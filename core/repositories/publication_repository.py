@@ -41,6 +41,12 @@ class PublicationRepository:
     def get_by_openalex_id(self, openalex_id: int) -> Publication:
         return self.session.query(Publication).filter(Publication.openalex_id == openalex_id).one_or_none()
 
+    def get_by_openalex_ids(self, openalex_ids: list[int]) -> list[Publication]:
+        """Returns the publications in the order of the given IDs, skipping unknown IDs."""
+        publications = self.session.query(Publication).filter(Publication.openalex_id.in_(openalex_ids)).all()
+        by_id = {publication.openalex_id: publication for publication in publications}
+        return [by_id[openalex_id] for openalex_id in openalex_ids if openalex_id in by_id]
+
     def get_all_openalex_ids(self) -> list[int]:
         results = self.session.query(Publication.openalex_id).all()
         return [result[0] for result in results]
