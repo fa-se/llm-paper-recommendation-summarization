@@ -50,6 +50,16 @@ class Work:
         work.cited_by_count = None
         return work
 
+    def to_dict(self) -> dict:
+        """JSON-serializable form, e.g. for trace events."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "authors": self.authors,
+            "publication_date": self.publication_date.date().isoformat(),
+            "abstract": self.abstract,
+        }
+
     def openalex_url(self) -> str:
         return f"https://openalex.org/W{self.id}"
 

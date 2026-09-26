@@ -30,6 +30,9 @@ def _empty_usage() -> dict:
 
 
 class Trace:
+    # False for the no-op trace, so that callers can skip work that only serves the events
+    enabled = True
+
     def __init__(self, on_event: Callable[[dict], None] | None = None):
         self.events: list[dict] = []
         self.on_event = on_event
@@ -100,6 +103,8 @@ class Trace:
 
 
 class _NullTrace(Trace):
+    enabled = False
+
     def emit(self, type: str, **data):
         pass
 

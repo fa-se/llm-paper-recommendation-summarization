@@ -4,18 +4,15 @@ Run from the repo root: python -m unittest tests.test_setwise_reranker (no API c
 """
 
 import hashlib
-import os
 import random
 import threading
 import time
 import unittest
 from types import SimpleNamespace
 
-os.environ.setdefault("OPENAI_API_KEY", "unused")  # core/__init__.py creates an OpenAI client at import time
-
-from core.instrumentation import Trace  # noqa: E402
-from core.llm_interfaces.base import LLMInterface  # noqa: E402
-from core.services.setwise_reranker import SetwiseHeapsortReranker  # noqa: E402
+from core.instrumentation import Trace
+from core.llm_interfaces.base import LLMInterface
+from core.services.setwise_reranker import SetwiseHeapsortReranker
 
 
 def arbitrary_choice(passages: list[str]) -> int:

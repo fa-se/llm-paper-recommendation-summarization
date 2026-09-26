@@ -47,6 +47,10 @@ class PublicationRepository:
         by_id = {publication.openalex_id: publication for publication in publications}
         return [by_id[openalex_id] for openalex_id in openalex_ids if openalex_id in by_id]
 
+    def get_titles_by_openalex_ids(self, openalex_ids: list[int]) -> dict[int, str]:
+        query = select(Publication.openalex_id, Publication.title).where(Publication.openalex_id.in_(openalex_ids))
+        return dict(self.session.execute(query).tuples().all())
+
     def get_all_openalex_ids(self) -> list[int]:
         results = self.session.query(Publication.openalex_id).all()
         return [result[0] for result in results]
