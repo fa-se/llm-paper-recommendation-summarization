@@ -1,3 +1,5 @@
+# fixed project name: through a symlinked path, compose would derive another one and start an empty volume
+name: project_name
 services:
   app:
     build: .
