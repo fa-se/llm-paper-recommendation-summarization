@@ -12,9 +12,10 @@ const facts = (...rows) => h("table", { class: "facts" }, h("tbody", {}, ...rows
 const b = (text) => h("strong", {}, text);
 const noRun = () => p(h("em", {}, "Start a run or a replay to see its numbers here."));
 
-// the wording that holds up after the 2026 re-check of the thesis's stored runs (prep notes: "the reranking eval")
+// the thesis's reranking eval, re-checked and re-run with the hybrid order kept in 2026 (scripts/eval_reranking.py;
+// prep notes: "the reranking eval")
 const EVAL_ANSWER =
-  "The thesis's evaluation, re-checked in 2026 from its three stored runs: 100 random papers each, every abstract used as a query, and the papers it cites as the right answers. Hybrid search keeps 100 of ~2,000 candidates; about a fifth of them are cited papers, ~10× their share of the corpus. The LLM's top 10 of those 100 holds 6–7 cited papers on average: about 3× a random 10 from the same pool, in all three runs (91–98 of the 100 queries each). Its top 3 are cited papers about three quarters of the time. Not measured: how much it beats hybrid search's own top 10. The eval code lost the hybrid order, so the thesis's before/after gain (+60 %) doesn't hold. In the user study, researchers rated relevance 2.89 of 5 (n = 19).";
+  "Measured with citations as the right answers: a paper's abstract is the query, and the papers it cites should come back. Re-run in 2026 with the current pipeline on 30 of the thesis's query papers: hybrid search keeps 100 of ~1,800 candidates, and its own top 10 holds 6.7 cited papers on average, 3× a random 10 of those 100 (2.2). The LLM's top 10 of the same 100 holds 7.4: about +10\u00a0%, better in 16 of 30 queries and worse in 6 (p = 0.015). So the cheap searches do most of the ranking, and the LLM adds the last step. The thesis had reported +60\u00a0%: its eval code lost the hybrid order and compared against an arbitrary one. In the user study, researchers rated relevance 2.89 of 5 (n = 19).";
 
 const CONTENT = {
   intro: (run) => [
@@ -304,7 +305,7 @@ const CONTENT = {
         [b("The topic cut: "), "20 topics instead of 10 (measured: +7 to +9 points), or a threshold instead of a fixed cut."],
         [b("Feedback: "), "move the query toward liked papers (Rocchio), and learn from “not relevant because …”."],
         [b("Evaluation: "), "a proper test set of paragraph-long descriptions with relevance labels."],
-        [b("Eval hygiene: "), "assert that the baseline is in the order you think. Re-checking for today showed the thesis's “before” list was in the API's order, not the hybrid order, so its before/after gain isn't quotable. The same bug once made the reranker look harmful (8.5 → 7.0 cited papers in the top 10)."],
+        [b("Eval hygiene: "), "assert that the baseline is in the order you think. The thesis's “before” list turned out to be in the API's order, not the hybrid order: +60\u00a0% became about +10\u00a0% once re-run with the order kept. The same bug once made the reranker look harmful (8.5 → 7.0 cited papers in the top 10). And a “drop near-perfect scores, probably the query itself” filter was dropping real hits: 18 of the 20 it caught were cited papers."],
       ),
     ),
     section(

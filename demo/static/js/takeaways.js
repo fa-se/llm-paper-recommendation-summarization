@@ -57,8 +57,8 @@ export class TakeawaysView {
       },
       {
         title: "No labels? Borrow them",
-        body: "No dataset has paragraph-long interest descriptions with relevance labels. The trick: use a paper's abstract as the query, and the papers it cites as the right answers. The LLM's top 10 held 6–7 cited papers: 3× a random 10 from the same candidates, in all three runs.",
-        tag: "evaluation, 3 × 100 queries",
+        body: "No dataset has paragraph-long interest descriptions with relevance labels. So a paper's abstract is the query, and the papers it cites are the right answers. Hybrid search's top 10 held 6.7 cited papers, the LLM's 7.4. My thesis said +60\u00a0% for the LLM: an eval bug had lost the hybrid order. It's about +10\u00a0%.",
+        tag: "evaluation, 30 queries, re-run 2026",
       },
       {
         title: "Two years later, with an AI agent",
