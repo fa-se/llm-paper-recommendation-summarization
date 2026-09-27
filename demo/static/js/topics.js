@@ -2,9 +2,10 @@
 // the query's 10 most similar topics highlighted, and the list of those topics with their cosine similarity.
 // The query itself isn't drawn: a paragraph-long description is about equally similar to all of its matches, and less
 // similar to them than they are to each other (coral: 0.56-0.64 vs 0.63-0.86), so no point on the map represents it.
-// The map shows where the matches sit in the taxonomy; the list shows how similar they are.
+// The map shows where the matches sit in the taxonomy; the list shows how similar they are. The details drawer
+// (details.js) explains this for the audience.
 
-import { cssVar, fmt, h, openalexUrl, tooltip } from "./util.js";
+import { cssVar, fmt, h, openalexUrl, tooltip, viewHead } from "./util.js";
 
 export class TopicsView {
   constructor(root) {
@@ -13,8 +14,12 @@ export class TopicsView {
     this.zoomButton = h("button", { class: "small", onclick: () => this.zoom(!this.zoomed) }, "Whole map");
     this.list = h("ol", { class: "topic-list" });
     this.note = h("p", { class: "note" });
-    this.range = h("p", { class: "note" });
     root.append(
+      viewHead(
+        "topics",
+        "Which research areas?",
+        "OpenAlex files every paper under one of 4,516 research topics. The description is compared by meaning with all of them; the newest papers of the 10 closest topics form the pool that the next steps search.",
+      ),
       h(
         "div",
         { class: "map-layout" },
@@ -25,26 +30,12 @@ export class TopicsView {
           h(
             "div",
             { class: "map-legend" },
-            h("span", { class: "key" }, h("i", { class: "dot all" }), "OpenAlex topic"),
-            h("span", { class: "key" }, h("i", { class: "dot match" }), "top-10 match (rank)"),
-            h("span", { class: "map-caveat" }, "map distance is between topics, not to the query"),
+            h("span", { class: "key" }, h("i", { class: "dot all" }), "one of 4,516 topics; similar topics sit close together"),
+            h("span", { class: "key" }, h("i", { class: "dot match" }), "the 10 closest to the description"),
             this.zoomButton,
           ),
         ),
-        h(
-          "div",
-          { class: "side" },
-          h("h2", {}, "Where the interest lands in OpenAlex"),
-          h(
-            "p",
-            { class: "explain" },
-            "The description is embedded once (text-embedding-3-large, 1,024 d) and compared by cosine similarity with the embeddings of all 4,516 OpenAlex topics. ",
-            "The newest papers of the top 10 topics form the corpus; everything later ranks that corpus.",
-          ),
-          this.list,
-          this.range,
-          this.note,
-        ),
+        h("div", { class: "side" }, h("h3", {}, "The 10 closest topics"), h("div", { class: "list-head" }, h("span"), h("span", {}, "topic"), h("span", {}, "similarity to the description")), this.list, this.note),
       ),
     );
     this.view = { x: 0, y: 0, k: 1 }; // the visible part of the unit square: origin and zoom
@@ -77,7 +68,6 @@ export class TopicsView {
 
   reset() {
     this.matches = [];
-    this.range.textContent = "";
     this.list.replaceChildren(h("li", { class: "empty" }, "Run a query or replay a recording to see where it lands."));
     this.note.textContent = "";
     this.zoom(false, false);
@@ -87,18 +77,12 @@ export class TopicsView {
     if (event.type === "topics") this.showMatches(event.topics);
     if (event.type === "corpus") this.corpus = event.size;
     if (event.type === "filtered") this.note.textContent = `Fetched ${fmt.int(event.fetched)} papers for these topics: ${fmt.int(event.new)} new, ${fmt.int(event.already_present)} already in the corpus, ${fmt.int(event.duplicates)} duplicates, ${fmt.int(event.unusable)} without a usable abstract.`;
-    if (event.type === "run_start" && !event.ingest) this.note.textContent = "The corpus for the demo queries was fetched and embedded beforehand (OpenAlex fetch ≈ 15 s per 2,000 papers).";
   }
 
   async showMatches(topics) {
     await this.data;
     if (!this.topics) return;
     this.matches = topics.map((match, i) => ({ ...match, rank: i + 1, topic: this.byId.get(match.id) })).filter((match) => match.topic);
-    const similarities = this.matches.map((match) => match.similarity);
-    this.range.textContent = this.matches.length
-      ? `Cosine similarity to the query spans only ${Math.min(...similarities).toFixed(3)}–${Math.max(...similarities).toFixed(3)} across these ${this.matches.length}; the query is about equally close to all of them, so it has no faithful point on the map.`
-      : "";
-    const maxSimilarity = Math.max(...this.matches.map((m) => m.similarity), 0.01);
     this.list.replaceChildren(
       ...this.matches.map((match) =>
         h(
@@ -123,8 +107,9 @@ export class TopicsView {
           h(
             "div",
             { class: "sim" },
-            h("div", { class: "sim-track" }, h("div", { class: "sim-bar", style: { width: `${(match.similarity / maxSimilarity) * 100}%` } })),
-            h("span", { class: "sim-value" }, match.similarity.toFixed(3)),
+            // on an absolute scale (0 to 1), so a weak match looks weak: coral's best is 0.64, RAG's 0.45
+            h("div", { class: "sim-track", title: "cosine similarity, 0 to 1" }, h("div", { class: "sim-bar", style: { width: `${match.similarity * 100}%` } })),
+            h("span", { class: "sim-value" }, match.similarity.toFixed(2)),
           ),
         ),
       ),

@@ -1,48 +1,46 @@
-// The pipeline strip (one card per view: what goes in and out, time, cost), the run totals, and the call timeline.
+// The step bar (the intro steps, one card per pipeline stage with what goes in and out, time and cost, and the closing
+// steps), the run totals in the header, and the timeline of API calls.
 
-import { GROUPS, fmt, groupOf, h, s, attachTip } from "./util.js";
+import { GROUPS, STEPS, STEP_LABELS, attachTip, fmt, groupOf, h, s } from "./util.js";
 
-const CARDS = {
-  topics: { name: "Topic routing", key: "1" },
-  retrieval: { name: "Hybrid retrieval", key: "2" },
-  rerank: { name: "LLM reranking", key: "3" },
-  summaries: { name: "Tailored summaries", key: "4" },
+const PILL_TITLES = {
+  intro: "The problem, and the idea in one picture",
+  system: "The parts: OpenAlex, Postgres, the OpenAI models",
+  results: "The final top 5, and where they came from",
+  takeaways: "What I learned",
 };
 
 export class Pipeline {
-  constructor(strip, timeline, stats, onSelect) {
-    this.strip = strip;
-    this.timelineRoot = timeline;
-    this.statsRoot = stats;
-    this.cards = {};
-    for (const group of GROUPS) {
+  constructor(stepper, timeline, stats, onSelect) {
+    this.items = {};
+    const stages = h("div", { class: "stage-group" });
+    for (const step of STEPS) {
+      const number = GROUPS.indexOf(step) + 1;
+      if (!number) {
+        const pill = h("button", { class: "step-pill", type: "button", "data-step": step, onclick: () => onSelect(step), title: PILL_TITLES[step] }, STEP_LABELS[step]);
+        this.items[step] = pill;
+        // the stage cards sit between the intro and the closing pills
+        if (step === "results") stepper.append(stages);
+        stepper.append(pill);
+        continue;
+      }
       const card = h(
         "button",
-        { class: "stage", "data-group": group, onclick: () => onSelect(group), title: `Show this stage (key ${CARDS[group].key})` },
-        h("div", { class: "stage-head" }, h("span", { class: "stage-key" }, CARDS[group].key), h("span", { class: "stage-name" }, CARDS[group].name)),
-        h("div", { class: "stage-funnel" }, h("span", { class: "stage-out" }, "–"), h("span", { class: "stage-in" }, "")),
-        h("div", { class: "stage-detail" }, ""),
+        { class: "stage idle", type: "button", "data-step": step, onclick: () => onSelect(step), title: `Show this stage (key ${number})` },
+        h("div", { class: "stage-head" }, h("span", { class: "stage-key" }, number), h("span", { class: "stage-name" }, STEP_LABELS[step])),
+        h("div", { class: "stage-funnel" }, h("span", { class: "stage-out" }, ""), h("span", { class: "stage-in" }, "")),
         h("div", { class: "stage-metrics" }, h("span", { class: "stage-time" }, ""), h("span", { class: "stage-cost" }, "")),
       );
-      this.cards[group] = card;
-      this.strip.append(card);
-      if (group !== "summaries") this.strip.append(h("div", { class: "stage-arrow", "aria-hidden": "true" }, "→"));
+      this.items[step] = card;
+      if (number > 1) stages.append(h("div", { class: "stage-arrow", "aria-hidden": "true" }, "→"));
+      stages.append(card);
     }
-    this.strip.append(
-      h(
-        "label",
-        { class: "follow", title: "Switch to each stage's view as it starts" },
-        h("input", { type: "checkbox", id: "follow", checked: true }),
-        " follow the run",
-      ),
-    );
     this.stat = {};
-    this.statsRoot.replaceChildren(
+    stats.replaceChildren(
       ...[
         ["cost", "API cost", "hero"],
-        ["time", "Elapsed"],
+        ["time", "elapsed"],
         ["calls", "LLM calls"],
-        ["tokens", "Tokens in / out"],
       ].map(([key, label, cls]) => {
         this.stat[key] = h("span", { class: "stat-value" }, "–");
         return h("div", { class: `stat ${cls ?? ""}` }, this.stat[key], h("span", { class: "stat-label" }, label));
@@ -53,107 +51,71 @@ export class Pipeline {
   }
 
   reset(run) {
-    this.metrics = Object.fromEntries(GROUPS.map((group) => [group, { duration: 0, cost: 0, calls: 0, open: 0, started: false, done: false }]));
-    this.totals = { calls: 0, input: 0, output: 0, cost: 0 };
     for (const group of GROUPS) {
-      const card = this.cards[group];
-      card.classList.remove("running", "done", "failed");
-      card.querySelector(".stage-out").textContent = "–";
-      card.querySelector(".stage-in").textContent = "";
-      card.querySelector(".stage-detail").textContent = "";
+      const card = this.items[group];
+      card.classList.remove("running", "done", "failed", "pending");
+      card.classList.add("idle");
       card.querySelector(".stage-time").textContent = "";
       card.querySelector(".stage-cost").textContent = "";
     }
-    this.setFunnel("topics", "10", "of 4,516 OpenAlex topics");
-    this.setFunnel("retrieval", "50", "of the corpus");
+    this.setFunnel("topics", "10", "of 4,516 topics");
+    this.setFunnel("retrieval", "50", "of the papers");
     this.setFunnel("rerank", "5", "of 50 candidates");
-    this.setFunnel("summaries", "3", "top papers");
-    for (const card of Object.values(this.cards)) card.classList.add("idle");
-    this.stat.cost.textContent = "$0.0000";
+    this.setFunnel("summaries", "3", "summaries");
+    this.stat.cost.textContent = "$0.00";
     this.stat.time.textContent = "0.0 s";
     this.stat.calls.textContent = "0";
-    this.stat.tokens.textContent = "0 / 0";
     this.timeline.reset();
     this.shownTime = 0;
-    this.summaryCount = 0;
+    this.run = run;
   }
 
   setFunnel(group, out, input) {
-    const card = this.cards[group];
+    const card = this.items[group];
     card.querySelector(".stage-out").textContent = out;
     card.querySelector(".stage-in").textContent = input;
   }
 
-  detail(group, text) {
-    this.cards[group].querySelector(".stage-detail").textContent = text;
-  }
-
+  // the stage cards read their numbers from the run state, which has already applied the event
   onEvent(event, run) {
     const group = groupOf(event.stage);
-    const metrics = group ? this.metrics[group] : null;
     switch (event.type) {
       case "run_start":
+        this.setFunnel("retrieval", `${event.n * 10}`, "of the papers");
         this.setFunnel("rerank", `${event.n}`, `of ${event.n * 10} candidates`);
-        this.setFunnel("summaries", `${event.summaries}`, "top papers");
-        this.setFunnel("retrieval", `${event.n * 10}`, "of the corpus");
-        for (const card of Object.values(this.cards)) card.classList.remove("idle");
-        if (!event.summaries) this.cards.summaries.classList.add("idle");
+        this.setFunnel("summaries", `${event.summaries}`, "summaries");
+        for (const g of GROUPS) this.items[g].classList.remove("idle");
+        if (!event.summaries) this.items.summaries.classList.add("idle");
         break;
       case "stage_start":
-        if (!metrics) break;
-        metrics.open++;
-        metrics.started = true;
-        this.cards[group].classList.add("running");
-        if (event.stage === "fetch") this.detail("topics", `fetching up to ${event.limit ?? "all"} newest papers…`);
-        if (event.stage === "embed") this.detail("topics", `embedding ${fmt.int(event.works)} new abstracts…`);
-        if (event.stage === "index") this.detail("topics", "rebuilding the BM25 index…");
-        if (event.stage === "rerank") this.detail("rerank", "3 abstracts per call, 1-token answer");
-        if (event.stage === "summarize") this.detail("summaries", "abstract + interest → reasoning JSON");
+        if (group) this.items[group].classList.add("running");
+        if (event.stage === "fetch") this.setFunnel("topics", "10", "topics: fetching their newest papers…");
+        if (event.stage === "embed") this.setFunnel("topics", "10", `topics: embedding ${fmt.int(event.works)} new papers…`);
+        if (event.stage === "index") this.setFunnel("topics", "10", "topics: updating the keyword index…");
         break;
       case "stage_end":
-        if (!metrics) break;
-        metrics.open--;
-        // nested stages (semantic and bm25 inside hybrid) are already in their parent's duration
-        if (!["semantic", "bm25"].includes(event.stage)) metrics.duration += event.duration_s;
-        if (metrics.open === 0) {
-          metrics.done = true;
-          this.cards[group].classList.remove("running");
-          this.cards[group].classList.add("done");
+        if (!group) break;
+        if (run.groups[group].done) {
+          this.items[group].classList.remove("running");
+          this.items[group].classList.add("done");
         }
-        this.cards[group].querySelector(".stage-time").textContent = fmt.seconds(metrics.duration);
+        this.items[group].querySelector(".stage-time").textContent = fmt.seconds(run.groups[group].duration);
+        if (!run.groups[group].calls) this.items[group].querySelector(".stage-cost").textContent = "no LLM";
+        if (event.stage === "index" || (event.stage === "topics" && !run.meta.ingest)) this.setFunnel("topics", "10", "of 4,516 topics");
         break;
-      case "llm_call":
-        this.totals.calls++;
-        this.totals.input += event.input_tokens;
-        this.totals.output += event.output_tokens;
-        this.totals.cost = event.total_cost_usd;
-        if (metrics) {
-          metrics.cost += event.cost_usd;
-          metrics.calls++;
-          this.cards[group].querySelector(".stage-cost").textContent = `${fmt.usd(metrics.cost)} · ${metrics.calls} call${metrics.calls === 1 ? "" : "s"}`;
-        }
-        this.stat.cost.textContent = fmt.usd(this.totals.cost);
-        this.stat.calls.textContent = fmt.int(this.totals.calls);
-        this.stat.tokens.textContent = `${fmt.compact(this.totals.input)} / ${fmt.compact(this.totals.output)}`;
+      case "llm_call": {
+        this.stat.cost.textContent = fmt.usd(run.cost);
+        this.stat.calls.textContent = fmt.int(run.calls);
+        if (!group) break;
+        const { cost, calls } = run.groups[group];
+        this.items[group].querySelector(".stage-cost").textContent = `${fmt.usd(cost)} · ${calls} call${calls === 1 ? "" : "s"}`;
         break;
-      case "filtered":
-        this.detail("topics", `fetched ${fmt.int(event.fetched)}: ${fmt.int(event.new)} new, ${fmt.int(event.already_present)} known, ${fmt.int(event.duplicates + event.unusable)} dupes/junk`);
-        break;
+      }
       case "corpus":
         this.setFunnel("retrieval", `${run.meta.n * 10}`, `of ${fmt.int(event.size)} papers`);
         break;
-      case "ranking":
-        if (event.method === "hybrid") this.detail("retrieval", "BM25 + dense, min-max blended 0.2 / 0.8");
-        break;
-      case "reranked":
-        this.detail("rerank", `${event.calls} calls sent, ${event.used_calls} on the path`);
-        break;
-      case "summary":
-        this.summaryCount++;
-        this.detail("summaries", `${this.summaryCount} written`);
-        break;
       case "run_error":
-        for (const g of GROUPS) if (this.metrics[g].open) this.cards[g].classList.add("failed");
+        for (const g of GROUPS) if (run.groups[g].open) this.items[g].classList.add("failed");
         break;
     }
     this.timeline.onEvent(event, run);
@@ -168,13 +130,18 @@ export class Pipeline {
   }
 
   finish(run) {
-    for (const card of Object.values(this.cards)) card.classList.remove("running");
+    for (const g of GROUPS) this.items[g].classList.remove("running", "pending");
     this.setClock(run.t, run);
     this.timeline.setClock(run.t, run, true);
   }
 
-  select(group) {
-    for (const [name, card] of Object.entries(this.cards)) card.classList.toggle("selected", name === group);
+  select(step) {
+    for (const [name, item] of Object.entries(this.items)) item.classList.toggle("selected", name === step);
+  }
+
+  // the stage a paused run continues with
+  pending(group) {
+    for (const g of GROUPS) this.items[g].classList.toggle("pending", g === group);
   }
 }
 
@@ -187,9 +154,10 @@ class Timeline {
       "div",
       { class: "timeline-legend" },
       h("span", { class: "timeline-title" }, "API calls over time"),
-      h("span", { class: "key" }, h("i", { class: "swatch call" }), "needed"),
-      h("span", { class: "key" }, h("i", { class: "swatch speculative" }), "rerank call sent speculatively"),
-      h("span", { class: "key" }, h("i", { class: "swatch inflight" }), "in flight"),
+      h("span", { class: "key" }, h("i", { class: "swatch call" }), "call"),
+      h("span", { class: "key" }, h("i", { class: "swatch speculative" }), "ranking call sent ahead (speculative)"),
+      h("span", { class: "key" }, h("i", { class: "swatch inflight" }), "waiting for the answer"),
+      h("span", { class: "timeline-hint" }, "stacked bars run in parallel"),
     );
     this.root.append(this.legend, this.svg);
   }
@@ -248,7 +216,7 @@ class Timeline {
       case "compare_start": {
         const titles = event.docids.map((id, i) => `${"ABC"[i]}: ${run.work(id).title}`);
         this.addBar(`c${event.call}`, event.t, null, event.speculative ? "speculative" : "call", () =>
-          h("div", {}, h("div", { class: "tip-title" }, `Rerank call ${event.call}${event.speculative ? " (speculative)" : ""}`), ...titles.map((t) => h("div", { class: "tip-meta" }, t))),
+          h("div", {}, h("div", { class: "tip-title" }, `Ranking call ${event.call}${event.speculative ? " (sent ahead)" : ""}`), ...titles.map((t) => h("div", { class: "tip-meta" }, t))),
         );
         break;
       }
@@ -262,7 +230,7 @@ class Timeline {
         break;
       }
       case "llm_call": {
-        // rerank calls are drawn from compare_start/compare_end, which say which comparison they were
+        // ranking calls are drawn from compare_start/compare_end, which say which comparison they were
         if (group === "rerank") break;
         const start = Math.max(0, event.t - event.latency_s);
         this.addBar(`l${event.seq}`, start, event.t, "call", `${event.model}: ${fmt.int(event.input_tokens)} tokens in, ${fmt.int(event.output_tokens)} out, ${fmt.seconds(event.latency_s)}, ${fmt.usd(event.cost_usd)}`);
@@ -330,7 +298,7 @@ class Timeline {
       const x1 = this.x(stage.start);
       const x2 = this.x(stage.end ?? this.clock);
       this.bandLayer.append(s("rect", { class: `band band-${stage.group}`, x: x1, width: Math.max(1, x2 - x1), y: 0, height: this.plotHeight + 2 }));
-      if (x2 - x1 > 70) this.bandLayer.append(s("text", { class: "band-label", x: x1 + 4, y: this.plotHeight - 3 }, CARDS[stage.group].name));
+      if (x2 - x1 > 70) this.bandLayer.append(s("text", { class: "band-label", x: x1 + 4, y: this.plotHeight - 3 }, STEP_LABELS[stage.group]));
     }
   }
 }

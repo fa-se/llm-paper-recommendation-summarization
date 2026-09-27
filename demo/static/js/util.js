@@ -34,7 +34,20 @@ export const fmt = {
 
 export const words = (text) => (text ? text.trim().split(/\s+/).length : 0);
 
-// the views of the page; each groups the trace stages it shows
+// the steps of the page in presenting order: two intro steps, the four pipeline stages, and two closing steps
+export const STEPS = ["intro", "system", "topics", "retrieval", "rerank", "summaries", "results", "takeaways"];
+export const STEP_LABELS = {
+  intro: "The idea",
+  system: "The system",
+  topics: "Topic routing",
+  retrieval: "Search",
+  rerank: "LLM ranking",
+  summaries: "Summaries",
+  results: "Results",
+  takeaways: "Takeaways",
+};
+
+// the pipeline stages among the steps; each groups the trace stages it shows
 export const GROUPS = ["topics", "retrieval", "rerank", "summaries"];
 const STAGE_GROUP = {
   topics: "topics",
@@ -107,6 +120,17 @@ export function paperTip(work, extra) {
 export function attachTip(element, content) {
   element.addEventListener("mousemove", (event) => tooltip.show(typeof content === "function" ? content() : content, event.clientX, event.clientY));
   element.addEventListener("mouseleave", () => tooltip.hide());
+}
+
+// the head of a step's view: plain-language title and lede, and the button that opens the step's technical details
+export function viewHead(step, title, lede) {
+  const number = GROUPS.indexOf(step) + 1;
+  return h(
+    "header",
+    { class: "view-head" },
+    h("div", { class: "view-titles" }, h("h2", {}, number ? h("span", { class: "view-num" }, number) : null, title), lede ? h("p", { class: "lede" }, lede) : null),
+    h("button", { class: "info-button", type: "button", "data-details": step, title: "Technical details and likely questions (key i)" }, h("span", { class: "info-icon" }, "i"), "Details"),
+  );
 }
 
 export function cssVar(name, element = document.body) {

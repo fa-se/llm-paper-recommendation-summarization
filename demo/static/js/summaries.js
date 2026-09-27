@@ -1,7 +1,7 @@
 // Stage 4, tailored summaries: for each of the top papers, the abstract, the reasoning structure the model filled out
 // (normally discarded), and its FINAL_ANSWER, the summary tailored to the query. The steps are revealed in order.
 
-import { h, paperLink, rankColor, words } from "./util.js";
+import { h, paperLink, rankColor, viewHead, words } from "./util.js";
 
 export class SummariesView {
   constructor(root) {
@@ -9,17 +9,12 @@ export class SummariesView {
     this.tabs = h("div", { class: "summary-tabs", role: "tablist" });
     this.body = h("div", { class: "summary-body" });
     root.append(
-      h(
-        "div",
-        { class: "summary-head" },
-        this.tabs,
-        h(
-          "p",
-          { class: "explain" },
-          "The model fills out a fixed reasoning structure before it writes the summary. The structure was derived offline with Self-Discover (select, adapt, implement reasoning modules), merged by hand and frozen; ",
-          "strict structured output keeps its key order, so the steps come before FINAL_ANSWER. (The thesis prompt has no step 4; it's kept verbatim.)",
-        ),
+      viewHead(
+        "summaries",
+        "Why should I read it?",
+        "For each of the top 3, the LLM reads the description and the abstract, first fills in a fixed worksheet (findings, methods, conclusions, significance for this reader), and only then writes a short summary in the reader's terms.",
       ),
+      h("div", { class: "summary-head" }, this.tabs),
       this.body,
     );
     this.reset();
@@ -87,14 +82,14 @@ export class SummariesView {
               .join("\n");
             return h("li", { class: "step" }, h("div", { class: "step-title" }, title), action ? h("div", { class: "step-action" }, action) : null, h("div", { class: "step-content" }, content));
           })
-      : [h("li", { class: "empty" }, "gpt-6-sol is filling out the reasoning structure…")];
+      : [h("li", { class: "empty" }, "The model is filling in the worksheet…")];
     const summary = item.reasoning?.FINAL_ANSWER ?? item.summary;
     const finalCard = h(
       "div",
       { class: "final" },
-      h("h3", {}, "Tailored summary ", h("code", {}, "FINAL_ANSWER")),
+      h("h3", {}, "Summary for this reader"),
       summary ? h("p", { class: "final-text" }, summary) : h("p", { class: "empty" }, "…"),
-      summary ? h("div", { class: "final-meta" }, `${words(work.abstract)} words of abstract → ${words(summary)} words`) : null,
+      summary ? h("div", { class: "final-meta" }, `${words(work.abstract)} words of abstract → ${words(summary)} words of summary`) : null,
     );
     this.body.replaceChildren(
       h(
@@ -103,12 +98,12 @@ export class SummariesView {
         h(
           "section",
           { class: "abstract" },
-          h("h3", {}, "Abstract"),
+          h("h3", {}, "The paper's abstract"),
           h("div", { class: "abstract-title" }, paperLink(item.docid, work.title ?? `W${item.docid}`)),
           h("div", { class: "abstract-meta" }, meta, meta ? " · " : null, paperLink(item.docid, `OpenAlex W${item.docid} ↗`)),
           h("p", { class: "abstract-text" }, work.abstract ?? ""),
         ),
-        h("section", { class: "reasoning" }, h("h3", {}, "Reasoning structure, filled out"), h("ol", { class: "steps" }, ...steps)),
+        h("section", { class: "reasoning" }, h("h3", {}, "The model's worksheet, filled in first"), h("ol", { class: "steps" }, ...steps)),
         finalCard,
       ),
     );

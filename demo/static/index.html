@@ -8,62 +8,96 @@
     <link rel="stylesheet" href="/static/style.css" />
     <script type="module" src="/static/js/main.js"></script>
   </head>
-  <body>
+  <body data-step="intro">
     <header class="top">
       <div class="brand">
-        <h1>Papers worth reading, from a description of your research</h1>
-        <p class="sub">free text → OpenAlex topics → hybrid retrieval → setwise LLM reranking → tailored summaries</p>
+        <h1>Papers worth reading</h1>
+        <p class="sub">New research, found from a description of your interests</p>
       </div>
       <div class="stats" id="stats"></div>
-      <button id="theme" class="small ghost" type="button">Theme</button>
-    </header>
-
-    <section class="query-bar">
-      <div class="query-left">
-        <div class="chips" id="query-chips"></div>
-        <textarea id="query" rows="3" spellcheck="false" aria-label="Research interest"></textarea>
+      <div class="top-buttons">
+        <button id="settings-button" class="small ghost" type="button" aria-haspopup="true" aria-expanded="false" title="Replay speed, pacing, corpus">⚙ Settings</button>
+        <button id="theme" class="small ghost" type="button">Theme</button>
       </div>
-      <div class="controls">
-        <div class="control-row">
-          <button id="run" class="primary" type="button">▶ Run live</button>
-          <label class="check" title="Fetch and embed the newest papers on the query's topics first (needed for a query outside the demo corpus)"
-            ><input type="checkbox" id="ingest" /> fetch new papers first (+20–60 s)</label
-          >
-        </div>
-        <div class="control-row corpus-row">
-          <span id="corpus" class="status"></span>
-          <button id="reset-corpus" class="small" type="button" hidden title="Delete the papers that live runs fetched, and rebuild the BM25 index">Reset corpus</button>
-        </div>
-        <div class="control-row">
-          <select id="recordings" aria-label="Recorded run"></select>
+      <div id="settings" class="popover" hidden>
+        <label class="check" title="Pause before each stage, during live runs and replays; continue with Next, → or space"
+          ><input type="checkbox" id="stepwise" checked /> pause between stages</label
+        >
+        <label class="check" title="Switch to each stage's view as it starts"><input type="checkbox" id="follow" checked /> follow the run</label>
+        <label class="check"><input type="checkbox" id="show-timeline" checked /> show the API-call timeline</label>
+        <label class="field"
+          >replay speed
           <select id="speed" aria-label="Replay speed">
             <option value="0.5">0.5×</option>
             <option value="1" selected>1×</option>
             <option value="2">2×</option>
             <option value="4">4×</option>
           </select>
-          <label class="check" title="Pause before each stage; continue with the button or the space key"><input type="checkbox" id="stepwise" /> stage by stage</label>
-          <button id="replay" type="button">▶ Replay</button>
+        </label>
+        <label class="field">recording <select id="recordings" aria-label="Recorded run"></select></label>
+        <hr />
+        <label class="check" title="Fetch and embed the newest papers on the query's topics first (needed for a query outside the demo corpus)"
+          ><input type="checkbox" id="ingest" /> live runs: fetch new papers first (+20–60 s)</label
+        >
+        <div class="corpus-row">
+          <span id="corpus" class="status"></span>
+          <button id="reset-corpus" class="small" type="button" hidden title="Delete the papers that live runs fetched, and rebuild the BM25 index">Reset corpus</button>
         </div>
-        <div class="control-row playback">
-          <button id="continue" class="primary" type="button" hidden>Continue ▸</button>
-          <button id="skip" type="button" hidden>Skip to end</button>
-          <button id="stop" type="button" hidden>Stop</button>
-          <span id="status" class="status"></span>
-        </div>
+        <hr />
+        <p class="keys">
+          <kbd>→</kbd> <kbd>space</kbd> <kbd>PgDn</kbd> next · <kbd>←</kbd> <kbd>PgUp</kbd> back · <kbd>1</kbd>–<kbd>4</kbd> stages · <kbd>i</kbd> details · <kbd>Esc</kbd> close
+        </p>
       </div>
+    </header>
+
+    <nav class="stepbar" aria-label="Steps">
+      <div class="stepper" id="stepper"></div>
+      <div class="step-nav">
+        <button id="back" type="button" title="Back (← or PgUp)">◂</button>
+        <button id="next" class="primary" type="button" title="Next (→, space or PgDn)">Next ▸</button>
+      </div>
+    </nav>
+
+    <section class="query-bar collapsed" id="query-bar">
+      <div class="chips" id="query-chips"></div>
+      <textarea id="query" rows="1" spellcheck="false" aria-label="Research interest"></textarea>
+      <button id="expand-query" class="small ghost" type="button" title="Show the whole description">▾</button>
+      <div class="run-buttons">
+        <button id="run" type="button" title="Run the pipeline now, with real API calls (~25 s, ~$0.03)">▶ Run live</button>
+        <button id="replay" type="button" title="Play a recorded run of this query (no network needed)">▶ Replay</button>
+        <button id="skip" class="small" type="button" hidden>Skip to end</button>
+        <button id="stop" class="small" type="button" hidden>Stop</button>
+      </div>
+      <span id="status" class="status"></span>
     </section>
 
-    <nav class="pipeline" id="pipeline" aria-label="Pipeline stages"></nav>
-
-    <main class="views">
-      <section class="view" id="view-topics"></section>
+    <main class="views" id="views">
+      <section class="view page" id="view-intro"></section>
+      <section class="view page" id="view-system" hidden></section>
+      <section class="view" id="view-topics" hidden></section>
       <section class="view" id="view-retrieval" hidden></section>
       <section class="view" id="view-rerank" hidden></section>
       <section class="view" id="view-summaries" hidden></section>
+      <section class="view" id="view-results" hidden></section>
+      <section class="view page" id="view-takeaways" hidden></section>
+      <div class="no-run" id="no-run" hidden>
+        <p>This step fills in during a run.</p>
+        <div class="no-run-buttons">
+          <button id="no-run-replay" class="primary" type="button">▶ Replay the recorded run</button>
+          <button id="no-run-live" type="button">▶ Run live</button>
+        </div>
+      </div>
     </main>
 
     <footer class="timeline" id="timeline"></footer>
+
+    <aside class="drawer" id="drawer" hidden aria-label="Details">
+      <div class="drawer-head">
+        <h2 id="drawer-title">Details</h2>
+        <button id="drawer-close" class="small ghost" type="button" title="Close (Esc)">✕</button>
+      </div>
+      <div class="drawer-body" id="drawer-body"></div>
+    </aside>
 
     <div id="tooltip" class="tooltip" hidden></div>
     <div id="toast" class="toast" role="status" hidden></div>

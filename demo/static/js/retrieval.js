@@ -1,18 +1,18 @@
-// Stage 2, hybrid retrieval: BM25, dense and hybrid rankings side by side, then the LLM reranking's top k. Lines follow
-// the same paper across the columns; the final top-k papers keep their color everywhere. The blend can be changed
-// client-side from the recorded per-method scores: another weight, or reciprocal rank fusion instead.
+// Stage 2, hybrid retrieval: BM25, dense and hybrid rankings side by side. Lines follow the same paper across the
+// columns. The LLM's result isn't shown here (the Results step shows where the final top 5 came from), but once it's
+// known, the final top-k papers keep their color, and the columns list where they rank further down. The blend can be
+// changed client-side from the recorded per-method scores ("What if?"): another weight, or reciprocal rank fusion.
 
-import { attachTip, h, openOnClick, paperLink, paperTip, rankColor, s } from "./util.js";
+import { attachTip, h, openOnClick, paperLink, paperTip, rankColor, s, viewHead } from "./util.js";
 
 const SHOWN = 10;
 const RRF_K = 60;
 const RECORDED_WEIGHT = 0.8; // HYBRID_WEIGHTS in core/services/retrieval_service.py
 
 const COLUMNS = [
-  { key: "bm25", title: "BM25", sub: "keyword match, top 10 of 100", score: (r) => r.score.toFixed(3) },
-  { key: "semantic", title: "Dense", sub: "embedding cosine, top 10 of 100", score: (r) => r.score.toFixed(3) },
-  { key: "hybrid", title: "Hybrid", sub: "", score: (r) => r.score.toFixed(3) },
-  { key: "rerank", title: "LLM rerank", sub: "setwise heapsort over the 50 candidates", score: () => "" },
+  { key: "bm25", title: "Keyword match", sub: "BM25: shared words, weighted by rarity · top 10 of 100", score: (r) => r.score.toFixed(2) },
+  { key: "semantic", title: "Meaning match", sub: "embeddings: similar meaning, other words · top 10 of 100", score: (r) => r.score.toFixed(2) },
+  { key: "hybrid", title: "Combined: the candidates", sub: "", score: (r) => r.score.toFixed(2) },
 ];
 
 // Blends the two rankings like RetrievalService._hybrid_search (weighted sum of min-max normalized scores; a work
@@ -61,27 +61,27 @@ export class RetrievalView {
     this.resetButton = h("button", { class: "small", onclick: () => this.resetBlend() }, "As recorded");
     this.grid = h("div", { class: "rank-grid" });
     this.lines = s("svg", { class: "rank-lines", "aria-hidden": "true" });
-    root.append(
-      h(
-        "div",
-        { class: "blend-bar" },
-        h("span", { class: "blend-title" }, "Blend"),
-        this.modeSelect,
-        h("span", { class: "slider-end" }, "BM25"),
-        this.slider,
-        h("span", { class: "slider-end" }, "dense"),
-        this.weightLabel,
-        this.resetButton,
-        this.poolStat,
-      ),
-      h("div", { class: "rank-wrap" }, this.grid, this.lines),
-      h(
-        "p",
-        { class: "explain" },
-        "Cost-tiered funnel: BM25 (pg_bestmatch) and dense search (pgvector) each score the whole corpus in milliseconds; their blend picks 50 candidates; only those reach the LLM. ",
-        "Lines follow a paper across the columns; colors mark the LLM's final top 5.",
-      ),
+    this.blendBar = h(
+      "div",
+      { class: "blend-bar", hidden: true },
+      h("span", { class: "blend-title" }, "Blend"),
+      this.modeSelect,
+      h("span", { class: "slider-end" }, "keyword"),
+      this.slider,
+      h("span", { class: "slider-end" }, "meaning"),
+      this.weightLabel,
+      this.resetButton,
+      this.poolStat,
     );
+    this.whatIf = h("button", { class: "small what-if", type: "button", onclick: () => this.toggleBlend() }, "What if? Change the blend");
+    this.legend = h("p", { class: "rank-legend" });
+    const head = viewHead(
+      "retrieval",
+      "Which papers could fit?",
+      "Two cheap searches score every paper in the pool: by shared keywords, and by meaning. A blend of both picks 50 candidates; only these go to the LLM.",
+    );
+    head.insertBefore(this.whatIf, head.lastChild);
+    root.append(head, this.blendBar, h("div", { class: "rank-wrap" }, this.grid, this.lines), this.legend);
     new ResizeObserver(() => this.drawLines()).observe(this.grid);
     this.reset();
   }
@@ -90,6 +90,13 @@ export class RetrievalView {
     this.run = run;
     this.rankings = {};
     this.render();
+  }
+
+  toggleBlend(open = this.blendBar.hidden) {
+    this.blendBar.hidden = !open;
+    this.whatIf.classList.toggle("active", open);
+    if (!open) this.resetBlend();
+    requestAnimationFrame(() => this.drawLines());
   }
 
   resetBlend() {
@@ -106,7 +113,7 @@ export class RetrievalView {
       this.rankings[event.method] = event.results;
       if (event.method === "hybrid") this.checkBlend();
       this.render();
-    } else if (["ranked", "reranked", "candidates"].includes(event.type)) this.render();
+    } else if (["reranked", "candidates"].includes(event.type)) this.render();
   }
 
   show() {
@@ -136,7 +143,7 @@ export class RetrievalView {
   render() {
     const run = this.run;
     const recorded = this.mode === "weighted" && Math.abs(this.weight - RECORDED_WEIGHT) < 1e-9;
-    this.weightLabel.textContent = this.mode === "rrf" ? "weights unused" : `dense ${this.weight.toFixed(2)} · BM25 ${(1 - this.weight).toFixed(2)}`;
+    this.weightLabel.textContent = this.mode === "rrf" ? "weights unused" : `meaning ${this.weight.toFixed(2)} · keyword ${(1 - this.weight).toFixed(2)}`;
     this.slider.disabled = this.mode === "rrf";
     this.resetButton.disabled = recorded;
     this.root.classList.toggle("modified", !recorded);
@@ -146,10 +153,14 @@ export class RetrievalView {
       bm25: this.rankings.bm25 ?? null,
       semantic: this.rankings.semantic ?? null,
       hybrid,
-      rerank: run?.top?.length ? run.top.map((id) => ({ id })) : null,
     };
     const pool = new Set(run?.candidates ?? []);
-    const top = run?.top ?? [];
+    // the final top k, once the LLM is done: this view then marks where they rank in each column
+    const top = run?.rerank ? run.top : [];
+    this.top = top;
+    this.legend.textContent = top.length
+      ? `Lines connect the same paper across the columns. Colored: the LLM's final top ${top.length}, which the Results step follows.`
+      : "Lines connect the same paper across the columns.";
     this.ranks = Object.fromEntries(Object.entries(lists).map(([key, list]) => [key, new Map((list ?? []).map((r, i) => [r.id, i + 1]))]));
 
     // the pool statistic: how much of the candidate pool the LLM actually reranked this blend would keep
@@ -168,20 +179,19 @@ export class RetrievalView {
         const sub =
           column.key === "hybrid"
             ? this.mode === "rrf"
-              ? `Σ 1 / (${RRF_K} + rank), top 10 of 50`
-              : `${this.weight.toFixed(2)} · dense + ${(1 - this.weight).toFixed(2)} · BM25 (min-max), top 10 of 50`
-            : column.key === "rerank"
-              ? `top ${run?.meta?.n ?? 5} of the 50 candidates`
-              : column.sub;
+              ? `Σ 1 / (${RRF_K} + rank) · top 10 of 50`
+              : `${Math.round(this.weight * 100)} % meaning + ${Math.round((1 - this.weight) * 100)} % keyword · top 10 of 50`
+            : column.sub;
         const body = h("ol", { class: "rank-list" });
-        if (!list) body.append(h("li", { class: "empty" }, column.key === "rerank" && run?.candidates?.length ? "LLM comparing abstracts…" : "–"));
+        if (!list) body.append(h("li", { class: "empty" }, "–"));
         else {
-          const shown = column.key === "rerank" ? list : list.slice(0, SHOWN);
+          const shown = list.slice(0, SHOWN);
           shown.forEach((result, i) => body.append(this.row(column, result, i + 1, column.key === "hybrid" ? maxHybrid : null)));
+          if (column.key === "hybrid" && list.length > SHOWN) body.append(h("li", { class: "more" }, `+ ${list.length - SHOWN} more candidates → the LLM`));
           // the final top k papers that this column ranks below its shown rows
           const below = top.filter((id) => !shown.some((r) => r.id === id));
-          if (below.length && column.key !== "rerank") {
-            body.append(h("li", { class: "fold" }, "further down"));
+          if (below.length) {
+            body.append(h("li", { class: "fold" }, `the LLM's top ${top.length}, further down`));
             for (const id of below) body.append(this.foldRow(column, id, pool));
           }
         }
@@ -189,13 +199,11 @@ export class RetrievalView {
           column.key === "hybrid"
             ? h(
                 "span",
-                { class: "contrib-legend" },
+                { class: "contrib-legend", title: "Bar: the combined score, split into the meaning part and the keyword part. Full length: #1 in both searches" },
                 h("i", { class: "seg dense" }),
-                "dense part",
+                "meaning",
                 h("i", { class: "seg keyword" }),
-                "BM25 part",
-                h("i", { class: "seg track" }),
-                "full: #1 in both",
+                "keyword",
               )
             : null;
         return h("section", { class: `rank-col col-${column.key}` }, h("h3", {}, column.title, legend), h("div", { class: "col-sub" }, sub), body);
@@ -206,13 +214,13 @@ export class RetrievalView {
 
   row(column, result, rank, maxHybrid) {
     const run = this.run;
-    const finalRank = run?.finalRank(result.id);
+    const finalRank = this.top.includes(result.id) ? run.finalRank(result.id) : null;
     const work = run?.work(result.id) ?? { id: result.id, title: result.title };
     const color = rankColor(finalRank);
     const element = h(
       "li",
       { class: `rank-row${color ? " tracked" : ""}`, "data-id": result.id },
-      h("span", { class: "rank" }, column.key === "rerank" ? `#${rank}` : rank),
+      h("span", { class: "rank" }, rank),
       h("span", { class: "marker", style: color ? { background: color } : {} }),
       h(
         "div",
@@ -226,7 +234,6 @@ export class RetrievalView {
               h("span", { class: "seg keyword", style: { width: `${(result.bm25 / maxHybrid) * 100}%` } }),
             )
           : null,
-        column.key === "rerank" && work.hybridRank ? h("div", { class: "row-sub" }, `was hybrid #${work.hybridRank}`) : null,
       ),
       h("span", { class: "score" }, column.score(result)),
     );
@@ -247,13 +254,13 @@ export class RetrievalView {
       return this.mode === "rrf" ? `${name} 1 / (${RRF_K} + ${input}) = ${value.toFixed(4)}` : `${name} ${weight.toFixed(2)} × ${input.toFixed(3)} = ${value.toFixed(3)}`;
     };
     const max = this.mode === "rrf" ? (2 / (RRF_K + 1)).toFixed(4) : "1";
-    return `${part("dense", result.dense, result.denseInput, this.weight)} + ${part("BM25", result.bm25, result.bm25Input, 1 - this.weight)} = ${result.score.toFixed(this.mode === "rrf" ? 4 : 3)} (max ${max})`;
+    return `${part("meaning", result.dense, result.denseInput, this.weight)} + ${part("keyword", result.bm25, result.bm25Input, 1 - this.weight)} = ${result.score.toFixed(this.mode === "rrf" ? 4 : 3)} (max ${max})`;
   }
 
   foldRow(column, id, pool) {
     const rank = this.ranks[column.key].get(id);
     const color = rankColor(this.run.finalRank(id));
-    const text = rank ? `#${rank}` : column.key === "hybrid" ? "outside the top 50: not reranked" : "not in the top 100";
+    const text = rank ? `#${rank}` : "not in its top 100";
     const element = h(
       "li",
       { class: `rank-row fold-row tracked${rank ? "" : " missing"}`, "data-id": id },
@@ -271,17 +278,22 @@ export class RetrievalView {
   rankSummary(id) {
     const ranks = this.ranks;
     const k = this.run?.meta?.n ?? 5;
-    const llm = ranks.rerank.has(id)
-      ? `LLM #${ranks.rerank.get(id)}`
-      : this.run?.candidates?.includes(id)
-        ? `LLM: not in its top ${k} (ranks below ${k} aren't computed)`
-        : "LLM: not a candidate";
+    const final = this.top.indexOf(id) + 1;
+    const llm = !this.top.length
+      ? null
+      : final
+        ? `LLM #${final}`
+        : this.run?.candidates?.includes(id)
+          ? `LLM: not in its top ${k} (ranks below ${k} aren't computed)`
+          : "LLM: not a candidate";
     return [
-      `BM25 ${ranks.bm25.has(id) ? `#${ranks.bm25.get(id)}` : "not in top 100"}`,
-      `dense ${ranks.semantic.has(id) ? `#${ranks.semantic.get(id)}` : "not in top 100"}`,
-      `hybrid ${ranks.hybrid.has(id) ? `#${ranks.hybrid.get(id)}` : "not in top 50"}`,
+      `keyword ${ranks.bm25.has(id) ? `#${ranks.bm25.get(id)}` : "not in top 100"}`,
+      `meaning ${ranks.semantic.has(id) ? `#${ranks.semantic.get(id)}` : "not in top 100"}`,
+      `combined ${ranks.hybrid.has(id) ? `#${ranks.hybrid.get(id)}` : "not in top 50"}`,
       llm,
-    ].join(" · ");
+    ]
+      .filter(Boolean)
+      .join(" · ");
   }
 
   hoverable(element, id) {
@@ -312,7 +324,7 @@ export class RetrievalView {
       for (const [id, a] of left) {
         const b = right.get(id);
         if (!b) continue;
-        const finalRank = this.run?.finalRank(Number(id));
+        const finalRank = this.top.includes(Number(id)) ? this.run.finalRank(Number(id)) : null;
         const x1 = a.right - box.left + 2;
         const y1 = a.top + a.height / 2 - box.top;
         const x2 = b.left - box.left - 2;

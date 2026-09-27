@@ -4,7 +4,7 @@
 // link to the papers' OpenAlex pages.
 // The heap is replayed from the trace events like tests/test_setwise_reranker.py: test_events_reconstruct_the_heap.
 
-import { attachTip, fmt, h, openalexUrl, openOnClick, paperLink, paperTip, rankColor, s } from "./util.js";
+import { attachTip, fmt, h, openalexUrl, openOnClick, paperLink, paperTip, rankColor, s, viewHead } from "./util.js";
 
 const SYSTEM_PROMPT =
   "You are RankGPT, an intelligent assistant specialized in selecting the most relevant passage from a pool of passages based on their relevance to the query.";
@@ -17,6 +17,11 @@ export class HeapView {
     this.counters = h("dl", { class: "counters" });
     this.prompt = h("pre", { class: "prompt" });
     root.append(
+      viewHead(
+        "rerank",
+        "Which fit best? The LLM as the judge",
+        "The LLM gets the description and three abstracts, and answers with one letter: the best fit. A tournament tree (a heap) turns these small decisions into the top 5 of the 50 candidates, with about 55 of them.",
+      ),
       h(
         "div",
         { class: "heap-layout" },
@@ -24,17 +29,18 @@ export class HeapView {
         h(
           "div",
           { class: "side" },
-          h("h2", {}, "Setwise heapsort with an LLM"),
           h(
-            "p",
-            { class: "explain" },
-            "Each call shows the model 3 abstracts (a heap node and its 2 children) and asks for the label of the most relevant one: a 1-token answer. ",
-            "Heapsort then needs ~55 calls for the top 5 of 50. Independent subtrees run in parallel, and each sift-down sends the next level's comparison before it knows it's needed (dashed).",
+            "ul",
+            { class: "heap-legend" },
+            h("li", {}, h("i", { class: "lg-node" }, "12"), "a candidate; the number is its rank in the search"),
+            h("li", {}, h("i", { class: "lg-cmp" }), "being compared right now (three at a time)"),
+            h("li", {}, h("i", { class: "lg-spec" }), "asked ahead of time, in case it's needed"),
+            h("li", {}, h("i", { class: "lg-final" }), "the winner of a round moves up; the best go to the podium"),
           ),
           this.counters,
           h("h3", {}, "Latest decision"),
           this.decision,
-          h("details", { class: "prompt-details" }, h("summary", {}, "Prompt of this comparison"), this.prompt),
+          h("details", { class: "prompt-details" }, h("summary", {}, "The prompt of this comparison"), this.prompt),
         ),
       ),
     );
@@ -103,7 +109,7 @@ export class HeapView {
       const work = this.run.work(docid);
       const circle = s("circle", { r: 12 });
       const g = s("a", { class: "node", href: openalexUrl(docid), target: "_blank", rel: "noopener" }, circle, s("text", { "text-anchor": "middle", dy: "0.35em" }, work.hybridRank ?? ""));
-      attachTip(g, () => paperTip(work, `hybrid #${work.hybridRank}${this.run.finalRank(docid) ? ` · final #${this.run.finalRank(docid)}` : ""}`));
+      attachTip(g, () => paperTip(work, `search #${work.hybridRank}${this.ranked.includes(docid) ? ` · LLM #${this.ranked.indexOf(docid) + 1}` : ""}`));
       this.nodeLayer.append(g);
       this.nodes.set(docid, { g, circle });
     }
@@ -175,7 +181,7 @@ export class HeapView {
         s(
           "a",
           { href: openalexUrl(docid), target: "_blank", rel: "noopener" },
-          s("text", { class: "podium-rank", x: slot.x + this.radius + 12, y: slot.y - 5 }, `#${rank} · was hybrid #${work.hybridRank}`),
+          s("text", { class: "podium-rank", x: slot.x + this.radius + 12, y: slot.y - 5 }, `#${rank} · was #${work.hybridRank} in the search`),
           s("text", { class: "podium-name", x: slot.x + this.radius + 12, y: slot.y + 12 }, title.length > maxChars ? `${title.slice(0, maxChars - 1)}…` : title),
         ),
       );
@@ -250,7 +256,7 @@ export class HeapView {
   showDecision(comparison, winnerIndex) {
     const labels = "ABCDEFG";
     this.decision.replaceChildren(
-      h("div", { class: "decision-meta" }, `call ${comparison.call}${comparison.speculative ? " · sent speculatively" : ""} · heap positions ${comparison.positions.join(", ")}`),
+      h("div", { class: "decision-meta" }, `call ${comparison.call}${comparison.speculative ? " · asked ahead" : ""} · the description, plus:`),
       ...comparison.docids.map((docid, i) => {
         const work = this.run.work(docid);
         const row = h(
@@ -258,13 +264,13 @@ export class HeapView {
           { class: `passage${i === winnerIndex ? " winner" : ""}` },
           h("span", { class: "label" }, labels[i]),
           h("span", { class: "passage-title" }, paperLink(docid, work.title ?? `W${docid}`)),
-          h("span", { class: "passage-rank" }, `hybrid #${work.hybridRank}`),
+          h("span", { class: "passage-rank" }, `search #${work.hybridRank}`),
         );
         attachTip(row, () => paperTip(work));
         openOnClick(row, docid);
         return row;
       }),
-      h("div", { class: "answer" }, "Model output: ", h("code", {}, labels[winnerIndex] ?? "?")),
+      h("div", { class: "answer" }, "The model's whole answer: ", h("code", {}, labels[winnerIndex] ?? "?")),
     );
     // the prompt as SetwiseComparisonTask builds it (core/llm_interfaces/tasks.py)
     const passages = comparison.docids.map((docid, i) => `Passage ${labels[i]}: "${this.run.work(docid).abstract ?? "…"}"`).join("\n\n");
@@ -272,12 +278,11 @@ export class HeapView {
   }
 
   renderCounters() {
-    const { sent, speculative, answered, used } = this.stats;
+    const { sent, speculative } = this.stats;
     const items = [
-      ["calls sent", fmt.int(sent)],
-      ["in flight", fmt.int(this.inflight.size)],
-      ["sent speculatively", fmt.int(speculative)],
-      ["on the path taken", used === null ? "…" : fmt.int(used)],
+      ["LLM calls", fmt.int(sent)],
+      ["running in parallel now", fmt.int(this.inflight.size)],
+      ["of them asked ahead", fmt.int(speculative)],
     ];
     this.counters.replaceChildren(...items.flatMap(([label, value]) => [h("dt", {}, label), h("dd", {}, value)]));
   }
