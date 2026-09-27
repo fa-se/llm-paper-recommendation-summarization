@@ -125,7 +125,7 @@ const CONTENT = {
           [b("The demo pool: "), "fetched beforehand, the newest 2,000 papers over the 10 topics of each demo query together: published 30 Aug – 26 Sep 2026, about four weeks."],
           [b("A live fetch "), "(the menu next to “Run live”): the newest 100–1,000 papers of each topic, so small topics aren't crowded out by big ones. Measured on the RAG query's topics: 100 per topic reach back 2 days to 7 weeks; 500 per topic 11 days to 6½ months; 1,000 per topic 3 weeks (NLP) to 15 months (a small topic)."],
           [b("Why it matters: "), "a very specific description can find nothing relevant simply because the window holds no such paper. The search isn't failing then; the haystack has no needle. Fetch more per topic for such a description."],
-          [b("Cost: "), "the OpenAlex fetch is free (1,000 per topic: ~16 s); embedding the new abstracts costs about $0.045 per 1,000 papers, and the keyword index is rebuilt afterwards (seconds, growing with the pool)."],
+          [b("Cost and time: "), "the OpenAlex fetch is free (1,000 per topic: ~16 s). Embedding the new abstracts costs about $0.04 per 1,000 papers, and the API allows 1 M tokens a minute (~3,400 abstracts): beyond ~250 per topic, that limit sets the pace (1,000 per topic: ~2 min of embedding). The keyword index is rebuilt afterwards (seconds, growing with the pool)."],
         ),
         run.fetched
           ? facts(
