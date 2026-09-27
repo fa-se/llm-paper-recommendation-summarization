@@ -57,8 +57,8 @@ export class TakeawaysView {
       },
       {
         title: "No labels? Borrow them",
-        body: "No dataset has paragraph-long interest descriptions with relevance labels. The trick: use a paper's abstract as the query, and its references as the right answers. Measured that way, the LLM ranking reliably moved papers that share references with the query paper to the top.",
-        tag: "evaluation",
+        body: "No dataset has paragraph-long interest descriptions with relevance labels. The trick: use a paper's abstract as the query, and the papers it cites as the right answers. The LLM's top 10 held 6–7 cited papers: 3× a random 10 from the same candidates, in all three runs.",
+        tag: "evaluation, 3 × 100 queries",
       },
       {
         title: "Two years later, with an AI agent",

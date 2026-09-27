@@ -12,8 +12,9 @@ const facts = (...rows) => h("table", { class: "facts" }, h("tbody", {}, ...rows
 const b = (text) => h("strong", {}, text);
 const noRun = () => p(h("em", {}, "Start a run or a replay to see its numbers here."));
 
+// the wording that holds up after the 2026 re-check of the thesis's stored runs (prep notes: "the reranking eval")
 const EVAL_ANSWER =
-  "Thesis evaluation, 100 random papers, each abstract used as the query and its references as the “right answers”: after the LLM ranking, the top 10 shared clearly more references with the query paper (p < 10⁻⁶ in both runs of the evaluation). Whether it also found more of the directly cited papers varied between the two runs. In the user study, researchers rated relevance 2.89 of 5 (n = 19).";
+  "The thesis's evaluation, re-checked in 2026 from its three stored runs: 100 random papers each, every abstract used as a query, and the papers it cites as the right answers. Hybrid search keeps 100 of ~2,000 candidates; about a fifth of them are cited papers, ~10× their share of the corpus. The LLM's top 10 of those 100 holds 6–7 cited papers on average: about 3× a random 10 from the same pool, in all three runs (91–98 of the 100 queries each). Its top 3 are cited papers about three quarters of the time. Not measured: how much it beats hybrid search's own top 10. The eval code lost the hybrid order, so the thesis's before/after gain (+60 %) doesn't hold. In the user study, researchers rated relevance 2.89 of 5 (n = 19).";
 
 const CONTENT = {
   intro: (run) => [
@@ -303,6 +304,7 @@ const CONTENT = {
         [b("The topic cut: "), "20 topics instead of 10 (measured: +7 to +9 points), or a threshold instead of a fixed cut."],
         [b("Feedback: "), "move the query toward liked papers (Rocchio), and learn from “not relevant because …”."],
         [b("Evaluation: "), "a proper test set of paragraph-long descriptions with relevance labels."],
+        [b("Eval hygiene: "), "assert that the baseline is in the order you think. Re-checking for today showed the thesis's “before” list was in the API's order, not the hybrid order, so its before/after gain isn't quotable. The same bug once made the reranker look harmful (8.5 → 7.0 cited papers in the top 10)."],
       ),
     ),
     section(
