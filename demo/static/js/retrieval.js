@@ -2,7 +2,7 @@
 // the same paper across the columns; the final top-k papers keep their color everywhere. The blend can be changed
 // client-side from the recorded per-method scores: another weight, or reciprocal rank fusion instead.
 
-import { attachTip, h, paperTip, rankColor, s } from "./util.js";
+import { attachTip, h, openOnClick, paperLink, paperTip, rankColor, s } from "./util.js";
 
 const SHOWN = 10;
 const RRF_K = 60;
@@ -217,7 +217,7 @@ export class RetrievalView {
       h(
         "div",
         { class: "row-main" },
-        h("div", { class: "row-title" }, work.title ?? result.title ?? `W${result.id}`),
+        h("div", { class: "row-title" }, paperLink(result.id, work.title ?? result.title ?? `W${result.id}`)),
         column.key === "hybrid" && maxHybrid
           ? h(
               "div",
@@ -235,6 +235,7 @@ export class RetrievalView {
       if (column.key === "hybrid") tip.insertBefore(h("div", { class: "tip-meta" }, this.scoreSummary(result)), tip.querySelector(".tip-body"));
       return tip;
     });
+    openOnClick(element, result.id);
     this.hoverable(element, result.id);
     return element;
   }
@@ -261,6 +262,7 @@ export class RetrievalView {
       h("div", { class: "row-main" }, h("div", { class: "row-title" }, text)),
     );
     attachTip(element, () => paperTip(this.run.work(id), this.rankSummary(id)));
+    openOnClick(element, id);
     this.hoverable(element, id);
     return element;
   }

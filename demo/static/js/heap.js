@@ -1,9 +1,10 @@
 // Stage 3, setwise LLM reranking: the heap of the 50 candidates as the reranker builds and drains it. Each node is a
 // paper, labelled with its hybrid rank; comparisons in flight are outlined (dashed: sent speculatively), the winner
-// flashes, swaps move the nodes, and each extracted paper moves to the podium on the right.
+// flashes, swaps move the nodes, and each extracted paper moves to the podium on the right. Nodes and podium entries
+// link to the papers' OpenAlex pages.
 // The heap is replayed from the trace events like tests/test_setwise_reranker.py: test_events_reconstruct_the_heap.
 
-import { attachTip, fmt, h, paperTip, rankColor, s } from "./util.js";
+import { attachTip, fmt, h, openalexUrl, openOnClick, paperLink, paperTip, rankColor, s } from "./util.js";
 
 const SYSTEM_PROMPT =
   "You are RankGPT, an intelligent assistant specialized in selecting the most relevant passage from a pool of passages based on their relevance to the query.";
@@ -101,7 +102,7 @@ export class HeapView {
     for (const docid of docids) {
       const work = this.run.work(docid);
       const circle = s("circle", { r: 12 });
-      const g = s("g", { class: "node" }, circle, s("text", { "text-anchor": "middle", dy: "0.35em" }, work.hybridRank ?? ""));
+      const g = s("a", { class: "node", href: openalexUrl(docid), target: "_blank", rel: "noopener" }, circle, s("text", { "text-anchor": "middle", dy: "0.35em" }, work.hybridRank ?? ""));
       attachTip(g, () => paperTip(work, `hybrid #${work.hybridRank}${this.run.finalRank(docid) ? ` · final #${this.run.finalRank(docid)}` : ""}`));
       this.nodeLayer.append(g);
       this.nodes.set(docid, { g, circle });
@@ -171,8 +172,12 @@ export class HeapView {
       const maxChars = Math.floor((this.width - slot.x - 40) / 7);
       const title = work.title ?? "";
       this.podium.append(
-        s("text", { class: "podium-rank", x: slot.x + this.radius + 12, y: slot.y - 5 }, `#${rank} · was hybrid #${work.hybridRank}`),
-        s("text", { class: "podium-name", x: slot.x + this.radius + 12, y: slot.y + 12 }, title.length > maxChars ? `${title.slice(0, maxChars - 1)}…` : title),
+        s(
+          "a",
+          { href: openalexUrl(docid), target: "_blank", rel: "noopener" },
+          s("text", { class: "podium-rank", x: slot.x + this.radius + 12, y: slot.y - 5 }, `#${rank} · was hybrid #${work.hybridRank}`),
+          s("text", { class: "podium-name", x: slot.x + this.radius + 12, y: slot.y + 12 }, title.length > maxChars ? `${title.slice(0, maxChars - 1)}…` : title),
+        ),
       );
     }
   }
@@ -252,10 +257,11 @@ export class HeapView {
           "div",
           { class: `passage${i === winnerIndex ? " winner" : ""}` },
           h("span", { class: "label" }, labels[i]),
-          h("span", { class: "passage-title" }, work.title ?? `W${docid}`),
+          h("span", { class: "passage-title" }, paperLink(docid, work.title ?? `W${docid}`)),
           h("span", { class: "passage-rank" }, `hybrid #${work.hybridRank}`),
         );
         attachTip(row, () => paperTip(work));
+        openOnClick(row, docid);
         return row;
       }),
       h("div", { class: "answer" }, "Model output: ", h("code", {}, labels[winnerIndex] ?? "?")),

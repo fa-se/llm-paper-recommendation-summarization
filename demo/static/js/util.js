@@ -72,7 +72,24 @@ export const tooltip = {
   },
 };
 
-// tooltip content for a paper
+// OpenAlex pages of works ("W") and topics ("T"); the trace carries ids without the prefix
+export const openalexUrl = (id, prefix = "W") => `https://openalex.org/${prefix}${id}`;
+
+// a paper's title (or other content) as a link to its OpenAlex page, opened in a new tab
+export function paperLink(id, ...children) {
+  return h("a", { class: "openalex-link", href: openalexUrl(id), target: "_blank", rel: "noopener" }, ...children);
+}
+
+// a click anywhere on the element opens the paper too, except on a link inside it or when text was selected
+export function openOnClick(element, id) {
+  element.classList.add("clickable");
+  element.addEventListener("click", (event) => {
+    if (event.target.closest("a") || getSelection()?.toString()) return;
+    window.open(openalexUrl(id), "_blank", "noopener");
+  });
+}
+
+// tooltip content for a paper; every element that shows it opens the paper on click
 export function paperTip(work, extra) {
   const meta = [work.authors?.length ? work.authors.join(", ") : null, work.publication_date].filter(Boolean).join(" · ");
   const abstract = work.abstract ? (work.abstract.length > 420 ? `${work.abstract.slice(0, 420)}…` : work.abstract) : null;
@@ -83,6 +100,7 @@ export function paperTip(work, extra) {
     meta ? h("div", { class: "tip-meta" }, meta) : null,
     extra ? h("div", { class: "tip-meta" }, extra) : null,
     abstract ? h("div", { class: "tip-body" }, abstract) : null,
+    h("div", { class: "tip-hint" }, `Click to open W${work.id} in OpenAlex ↗`),
   );
 }
 

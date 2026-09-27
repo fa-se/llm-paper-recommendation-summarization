@@ -1,7 +1,7 @@
 // Stage 4, tailored summaries: for each of the top papers, the abstract, the reasoning structure the model filled out
 // (normally discarded), and its FINAL_ANSWER, the summary tailored to the query. The steps are revealed in order.
 
-import { h, rankColor, words } from "./util.js";
+import { h, paperLink, rankColor, words } from "./util.js";
 
 export class SummariesView {
   constructor(root) {
@@ -75,6 +75,7 @@ export class SummariesView {
       return;
     }
     const work = this.run.work(item.docid);
+    const meta = [work.authors?.join(", "), work.publication_date].filter(Boolean).join(" · ");
     const steps = item.reasoning
       ? Object.entries(item.reasoning)
           .filter(([key]) => key !== "FINAL_ANSWER")
@@ -103,8 +104,8 @@ export class SummariesView {
           "section",
           { class: "abstract" },
           h("h3", {}, "Abstract"),
-          h("div", { class: "abstract-title" }, work.title ?? ""),
-          h("div", { class: "abstract-meta" }, [work.authors?.join(", "), work.publication_date].filter(Boolean).join(" · ")),
+          h("div", { class: "abstract-title" }, paperLink(item.docid, work.title ?? `W${item.docid}`)),
+          h("div", { class: "abstract-meta" }, meta, meta ? " · " : null, paperLink(item.docid, `OpenAlex W${item.docid} ↗`)),
           h("p", { class: "abstract-text" }, work.abstract ?? ""),
         ),
         h("section", { class: "reasoning" }, h("h3", {}, "Reasoning structure, filled out"), h("ol", { class: "steps" }, ...steps)),

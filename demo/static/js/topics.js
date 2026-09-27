@@ -4,7 +4,7 @@
 // similar to them than they are to each other (coral: 0.56-0.64 vs 0.63-0.86), so no point on the map represents it.
 // The map shows where the matches sit in the taxonomy; the list shows how similar they are.
 
-import { cssVar, fmt, h, tooltip } from "./util.js";
+import { cssVar, fmt, h, openalexUrl, tooltip } from "./util.js";
 
 export class TopicsView {
   constructor(root) {
@@ -117,7 +117,7 @@ export class TopicsView {
           h(
             "div",
             { class: "topic-text" },
-            h("div", { class: "topic-name" }, match.name),
+            h("div", { class: "topic-name" }, h("a", { class: "openalex-link", href: openalexUrl(match.id, "T"), target: "_blank", rel: "noopener" }, match.name)),
             h("div", { class: "topic-meta" }, `${match.topic.subfield} · ${match.topic.field}`),
           ),
           h(

@@ -749,6 +749,10 @@ textarea {
 }
 .node {
   transition: transform 0.35s ease;
+  cursor: pointer;
+}
+.podium a:hover .podium-name {
+  text-decoration: underline;
 }
 .node circle {
   fill: var(--surface-2);
@@ -930,6 +934,10 @@ textarea {
 .abstract-title {
   font-weight: 600;
 }
+.abstract-meta .openalex-link {
+  text-decoration: underline;
+  white-space: nowrap;
+}
 .abstract-meta {
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -1058,6 +1066,19 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+/* links to OpenAlex pages: read as text until hovered; rows that open a paper on click */
+.openalex-link {
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+.openalex-link:hover {
+  text-decoration: underline;
+}
+.clickable {
+  cursor: pointer;
+}
+
 /* --- overlays --- */
 .tooltip {
   position: fixed;
@@ -1082,6 +1103,11 @@ textarea {
 .tip-body {
   margin-top: 4px;
   color: var(--text-secondary);
+}
+.tip-hint {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
 }
 .toast {
   position: fixed;
