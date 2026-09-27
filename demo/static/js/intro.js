@@ -2,7 +2,7 @@
 // after each stage (log scale); between them, each stage with the question it answers, how, and its time and cost (from
 // the run on screen, or typical values before a run). A click on a stage opens its view.
 
-import { GROUPS, STEP_LABELS, fmt, h, s, viewHead } from "./util.js";
+import { GROUPS, STEP_LABELS, dayRange, fmt, h, s, viewHead } from "./util.js";
 
 // OpenAlex, queried 2026-09-27: all works, and works published in 2025
 const OPENALEX_WORKS = 327_331_874;
@@ -24,7 +24,7 @@ const TYPICAL = {
   summaries: { duration: 7.8, cost: 0.0206, calls: 3 },
 };
 
-const BAND = 190; // px: height of the funnel's bar band
+const BAND = 160; // px: height of the funnel's bar band
 const barHeight = (count) => Math.max(8, (Math.log10(Math.max(count, 1)) / Math.log10(OPENALEX_WORKS)) * BAND);
 
 export class IntroView {
@@ -35,7 +35,11 @@ export class IntroView {
     this.funnel = h("div", { class: "funnel" });
     this.funnelNote = h("p", { class: "funnel-note" });
     root.append(
-      viewHead("intro", "Papers worth reading, from a description of your research", null),
+      viewHead(
+        "intro",
+        "Papers worth reading, from a description of your research",
+        "Late 2023, a year after ChatGPT came out, my Master's thesis asked how LLMs could help researchers in their daily work. One chore every researcher knows: keeping up with what's new in their own field.",
+      ),
       h(
         "div",
         { class: "intro-grid" },
@@ -60,7 +64,7 @@ export class IntroView {
           h("p", { class: "idea-line" }, h("span", { class: "idea-tag" }, "In"), h("span", {}, "a paragraph about your research, the way you'd describe it to a colleague.")),
           h("p", { class: "idea-line" }, h("span", { class: "idea-tag" }, "Out"), h("span", {}, "the newest papers that match it, ranked, each with a short summary of why it matters to you.")),
           h("p", { class: "idea-note" }, "No keywords, no citation counts, no click history."),
-          h("p", { class: "idea-note" }, "My Master's thesis at TU Berlin (2024), brought back to life for this demo."),
+          h("p", { class: "idea-note" }, "Master's thesis at TU Berlin: topic chosen late 2023, submitted August 2024, brought back to life for this demo."),
         ),
       ),
       h("section", { class: "funnel-section" }, h("h3", { class: "kicker" }, "How: a funnel, from cheap to expensive"), this.funnel, this.funnelNote),
@@ -73,9 +77,10 @@ export class IntroView {
     this.render();
   }
 
-  // the pool size before a run: the corpus in the database
-  setCorpus(rows) {
+  // the pool before a run: the corpus in the database, and its publication dates
+  setCorpus(rows, range) {
     this.pool = rows;
+    this.poolRange = range;
     if (!this.run?.corpus) this.render();
   }
 
@@ -93,9 +98,15 @@ export class IntroView {
     const run = this.run;
     const live = run?.finished && !run.error;
     const n = run?.meta?.n ?? 5;
+    const range = run?.pool ?? (run?.corpus ? null : this.poolRange);
     const levels = [
       { count: OPENALEX_WORKS, text: `${Math.round(OPENALEX_WORKS / 1e6)} M`, label: "works in OpenAlex" },
-      { count: run?.corpus ?? this.pool, text: fmt.int(run?.corpus ?? this.pool), label: "recent papers in the pool" },
+      {
+        count: run?.corpus ?? this.pool,
+        text: fmt.int(run?.corpus ?? this.pool),
+        label: "recent papers in the pool",
+        sub: range ? `published ${dayRange(range.oldest, range.newest)}` : null,
+      },
       { count: n * 10, text: `${n * 10}`, label: "candidates" },
       { count: n, text: `${n}`, label: "best matches" },
       { count: run?.meta?.summaries ?? 3, text: `${run?.meta?.summaries ?? 3}`, label: "summaries" },
@@ -109,7 +120,7 @@ export class IntroView {
           { class: "f-level" },
           h("div", { class: "f-count" }, level.text),
           h("div", { class: "f-band" }, h("div", { class: "f-bar", style: { height: `${heights[i]}px` } })),
-          h("div", { class: "f-label" }, level.label),
+          h("div", { class: "f-label" }, level.label, level.sub ? h("div", { class: "f-sub" }, level.sub) : null),
         ),
       );
       const step = GROUPS[i];

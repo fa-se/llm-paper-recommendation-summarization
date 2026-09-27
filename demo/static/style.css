@@ -692,7 +692,7 @@ textarea {
   grid-template-columns: 22px minmax(0, 1fr) 130px;
   gap: 8px;
   align-items: center;
-  padding: 3px 4px;
+  padding: 2px 4px;
   border-radius: 6px;
 }
 .topic-list li.empty {
@@ -1447,10 +1447,10 @@ textarea {
 .intro-card {
   background: var(--surface-2);
   border-radius: 12px;
-  padding: 14px 18px;
+  padding: 12px 18px;
 }
 .intro-card p {
-  margin: 8px 0;
+  margin: 6px 0;
 }
 .big-stat {
   display: flex;
@@ -1459,7 +1459,7 @@ textarea {
   flex-wrap: wrap;
 }
 .big-number {
-  font-size: 2.6rem;
+  font-size: 2.4rem;
   font-weight: 700;
   line-height: 1.05;
 }
@@ -1534,7 +1534,7 @@ textarea {
   font-weight: 600;
 }
 .f-band {
-  height: 190px;
+  height: 160px;
   width: 100%;
   display: flex;
   align-items: center;
@@ -1942,4 +1942,101 @@ body.no-timeline .timeline {
   .query-bar {
     flex-wrap: wrap;
   }
+}
+
+/* --- additions: the eval bars on a takeaway card, the heap's phase banner and legend, the pool's time window --- */
+.mini-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 0.82rem;
+}
+.mini-title {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.mini-row {
+  display: grid;
+  grid-template-columns: minmax(0, 11em) minmax(0, 1fr) 2.2em;
+  gap: 8px;
+  align-items: center;
+}
+.mini-label {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mini-track {
+  height: 10px;
+  background: var(--grid);
+  border-radius: 0 4px 4px 0;
+}
+.mini-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 0 4px 4px 0;
+}
+.mini-row.reference .mini-bar {
+  background: var(--axis);
+}
+.mini-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.heap-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.heap-panel .heap-svg {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
+.heap-phase {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 6px 10px;
+  max-width: 95ch;
+}
+.heap-phase strong {
+  color: var(--text-primary);
+}
+.legend-title {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.heap-legend .lg-flash {
+  background: radial-gradient(circle, var(--text-primary) 0 7px, transparent 8px);
+}
+.heap-legend .lg-swap {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.topic-fetched {
+  color: var(--text-secondary);
+}
+.pool-note {
+  margin: 0 0 4px;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+}
+.f-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+#fetch {
+  max-width: 20em;
+  font-size: 0.85rem;
+  padding: 5px 8px;
 }

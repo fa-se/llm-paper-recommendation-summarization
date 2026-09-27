@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 import core
 from core.instrumentation import Trace
@@ -37,8 +38,10 @@ STATIC = Path(__file__).parent / "static"
 RECORDINGS = Path(__file__).parent / "recordings"
 # topics a query is routed to (as in the pre-ingest of the demo queries, scripts/demo_queries.py)
 NUM_TOPICS = 10
-# newest works fetched per live ingest; small, because the OpenAlex fetch alone takes ~15 s per 2,000 works
+# newest works fetched per live ingest (the old "fetch new papers first", over all topics together)
 INGEST_LIMIT = 500
+# the most works a live run may fetch per topic: 1,000 per topic for 10 topics take ~16 s to fetch and ~$0.45 to embed
+MAX_PER_TOPIC = 1000
 
 
 class RunRequest(BaseModel):
@@ -46,7 +49,9 @@ class RunRequest(BaseModel):
     query_name: str | None = None
     n: int = Field(default=5, ge=1, le=10)
     summaries: int = Field(default=3, ge=0, le=5)
-    # fetch and embed the newest works on the query's topics first: needed for a query outside the demo corpus
+    # fetch and embed the newest works on the query's topics first: needed for a query outside the demo corpus.
+    # fetch_per_topic: the newest N works of each topic; ingest (older clients): INGEST_LIMIT over all topics
+    fetch_per_topic: int = Field(default=0, ge=0, le=MAX_PER_TOPIC)
     ingest: bool = False
 
 
@@ -96,15 +101,21 @@ def _execute(run: Run):
             start_date=START_DATE.date().isoformat(),
             n=request.n,
             summaries=request.summaries,
-            ingest=request.ingest,
+            ingest=bool(request.ingest or request.fetch_per_topic),
+            fetch_per_topic=request.fetch_per_topic,
         )
         try:
-            if request.ingest:
+            if request.fetch_per_topic:
+                core.retrieval.ingest(
+                    request.query, START_DATE, num_topics=NUM_TOPICS, per_topic=request.fetch_per_topic
+                )
+            elif request.ingest:
                 core.retrieval.ingest(request.query, START_DATE, limit=INGEST_LIMIT, num_topics=NUM_TOPICS)
             else:
                 core.retrieval.match_topics(request.query, NUM_TOPICS)
-            # search() ranks the whole corpus, not only the works fetched for this query
-            trace.emit("corpus", size=core.retrieval.publication_repository.count())
+            # search() ranks the whole corpus, not only the works fetched for this query; oldest/newest: how far back
+            # the searched papers reach
+            trace.emit("corpus", size=core.retrieval.publication_repository.count(), **_date_range())
             works = core.retrieval.search(request.query, n=request.n, start_date=START_DATE)
             if request.summaries:
                 core.summarization.summarize(request.query, works[: request.summaries])
@@ -117,6 +128,19 @@ def _execute(run: Run):
             return
     RECORDINGS.mkdir(exist_ok=True)
     trace.save(RECORDINGS / f"{datetime.now():%Y-%m-%d_%H%M%S}_{request.query_name or 'custom'}.json")
+
+
+def _date_range() -> dict:
+    """The publication dates of the papers search() ranks (the corpus since START_DATE)."""
+    session = core.retrieval.publication_repository.session
+    oldest, newest = session.execute(
+        text(
+            "SELECT min(publication_datetime_utc)::date, max(publication_datetime_utc)::date FROM publication "
+            "WHERE publication_datetime_utc >= :start"
+        ),
+        {"start": START_DATE},
+    ).one()
+    return {"oldest": oldest and oldest.isoformat(), "newest": newest and newest.isoformat()}
 
 
 def _run_in_worker(run: Run):
@@ -139,6 +163,7 @@ def config():
         "start_date": START_DATE.date().isoformat(),
         "num_topics": NUM_TOPICS,
         "ingest_limit": INGEST_LIMIT,
+        "max_per_topic": MAX_PER_TOPIC,
         "busy": _busy.locked(),
     }
 

@@ -12,16 +12,15 @@ const facts = (...rows) => h("table", { class: "facts" }, h("tbody", {}, ...rows
 const b = (text) => h("strong", {}, text);
 const noRun = () => p(h("em", {}, "Start a run or a replay to see its numbers here."));
 
-// the thesis's reranking eval, re-checked and re-run with the hybrid order kept in 2026 (scripts/eval_reranking.py;
-// prep notes: "the reranking eval")
+// the reranking eval with the current pipeline (scripts/eval_reranking.py, 30 queries; prep notes: "the reranking eval")
 const EVAL_ANSWER =
-  "Measured with citations as the right answers: a paper's abstract is the query, and the papers it cites should come back. Re-run in 2026 with the current pipeline on 30 of the thesis's query papers: hybrid search keeps 100 of ~1,800 candidates, and its own top 10 holds 6.7 cited papers on average, 3× a random 10 of those 100 (2.2). The LLM's top 10 of the same 100 holds 7.4: about +10\u00a0%, better in 16 of 30 queries and worse in 6 (p = 0.015). So the cheap searches do most of the ranking, and the LLM adds the last step. The thesis had reported +60\u00a0%: its eval code lost the hybrid order and compared against an arbitrary one. In the user study, researchers rated relevance 2.89 of 5 (n = 19).";
+  "Measured with citations as the right answers: a paper's abstract is the query, and the papers it cites should come back. 30 papers, with the current pipeline: out of ~1,800 candidates, hybrid search keeps 100, and its own top 10 already holds 6.7 cited papers, 3× a random 10 of those 100 (2.2). The LLM's top 10 holds 7.4: about +10\u00a0%, better in 16 of 30 queries and worse in 6 (p = 0.015). So the cheap searches do most of the ranking, and the LLM adds the last step, for about a cent per query. Citations undersell it a bit: the LLM can rank a relevant paper the author simply didn't cite. In the user study, researchers rated relevance 2.89 of 5 (n = 19).";
 
 const CONTENT = {
   intro: (run) => [
     section(
       "The thesis",
-      p("“Leveraging LLMs for Personalized Suggestion and Summarization of Scientific Publications”, Master's thesis in computer science at TU Berlin (Chair of Open Distributed Systems), submitted August 2024, defended April 2025."),
+      p("“Leveraging LLMs for Personalized Suggestion and Summarization of Scientific Publications”, Master's thesis in computer science at TU Berlin (Chair of Open Distributed Systems). Topic chosen in late 2023, a year after ChatGPT's release; submitted August 2024, defended April 2025."),
       p("Two research questions: how to combine LLMs with classic retrieval to judge a paper's relevance to one person's interests, and how to use LLMs for summaries that bring out that relevance."),
     ),
     section(
@@ -117,7 +116,24 @@ const CONTENT = {
       section(
         "How it works",
         p("The description is embedded (text-embedding-3-large, 1,024 dimensions) and compared by cosine similarity with the embeddings of all 4,516 OpenAlex topics, an exact search in Postgres. The 10 most similar topics are kept."),
-        p("At ingest, OpenAlex returns the newest papers (up to 2,000, since 1 Jan 2025, with an abstract) whose primary topic is one of the 10. For the demo this was done beforehand; the fetch alone takes about 15 s per 2,000 papers."),
+        p("At ingest, OpenAlex returns the newest papers (since 1 Jan 2025, with an abstract) whose primary topic is one of the 10. The next steps search every paper fetched so far, not only this query's."),
+      ),
+      section(
+        "How far back the pool reaches",
+        p("The fetch takes the newest papers up to a count, not a date. So the time window depends on how busy a topic is."),
+        ul(
+          [b("The demo pool: "), "fetched beforehand, the newest 2,000 papers over the 10 topics of each demo query together: published 30 Aug – 26 Sep 2026, about four weeks."],
+          [b("A live fetch "), "(the menu next to “Run live”): the newest 100–1,000 papers of each topic, so small topics aren't crowded out by big ones. Measured on the RAG query's topics: 100 per topic reach back 2 days to 7 weeks; 500 per topic 11 days to 6½ months; 1,000 per topic 3 weeks (NLP) to 15 months (a small topic)."],
+          [b("Why it matters: "), "a very specific description can find nothing relevant simply because the window holds no such paper. The search isn't failing then; the haystack has no needle. Fetch more per topic for such a description."],
+          [b("Cost: "), "the OpenAlex fetch is free (1,000 per topic: ~16 s); embedding the new abstracts costs about $0.045 per 1,000 papers, and the keyword index is rebuilt afterwards (seconds, growing with the pool)."],
+        ),
+        run.fetched
+          ? facts(
+              ["This run fetched", `${fmt.int(run.fetched.count)} papers${run.fetched.per_topic ? ` (${fmt.int(run.fetched.per_topic)} per topic)` : ""}, back to ${run.fetched.oldest ?? "–"}`],
+              ...(run.fetched.topics ?? []).map((topic) => [run.topics.find((t) => t.id === topic.id)?.name ?? `T${topic.id}`, `${fmt.int(topic.count)} papers, back to ${topic.oldest ?? "–"}`]),
+            )
+          : null,
+        run.pool ? p(`Searched in this run: ${fmt.int(run.corpus)} papers published ${run.pool.oldest} to ${run.pool.newest}.`) : null,
       ),
       section(
         "In this run",
@@ -229,7 +245,7 @@ const CONTENT = {
           ["Why not have the LLM score each paper 1–10?", "Scores from separate calls aren't calibrated against each other; comparing papers side by side is more reliable. The setwise paper reports a better cost/quality trade-off than pointwise, pairwise and listwise prompting."],
           ["Why not all 50 in one prompt?", "About 16k tokens of abstracts in one prompt, and an answer of 50 labels that must be parsed and can be inconsistent. Three at a time keeps each prompt small and each answer one token."],
           ["Is it deterministic?", "No: even at temperature 0 the model isn't fully deterministic, and the order of the top 5 varies slightly between runs. That's one reason the demo can replay a recorded run."],
-          ["A cross-encoder or a rerank API instead?", "Cheaper and faster; not compared in the thesis. A good baseline to add."],
+          ["A cross-encoder or a rerank API instead?", "Cheaper and faster; not compared in the thesis. On the citation measure, it would only need to beat the LLM's +10\u00a0% over hybrid search: a good baseline to add."],
           ["Does it work?", EVAL_ANSWER],
         ),
       ),
@@ -305,7 +321,6 @@ const CONTENT = {
         [b("The topic cut: "), "20 topics instead of 10 (measured: +7 to +9 points), or a threshold instead of a fixed cut."],
         [b("Feedback: "), "move the query toward liked papers (Rocchio), and learn from “not relevant because …”."],
         [b("Evaluation: "), "a proper test set of paragraph-long descriptions with relevance labels."],
-        [b("Eval hygiene: "), "assert that the baseline is in the order you think. The thesis's “before” list turned out to be in the API's order, not the hybrid order: +60\u00a0% became about +10\u00a0% once re-run with the order kept. The same bug once made the reranker look harmful (8.5 → 7.0 cited papers in the top 10). And a “drop near-perfect scores, probably the query itself” filter was dropping real hits: 18 of the 20 it caught were cited papers."],
       ),
     ),
     section(

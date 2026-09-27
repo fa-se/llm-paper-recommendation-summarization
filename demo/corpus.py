@@ -46,12 +46,22 @@ def status() -> dict:
     baseline = load_baseline()
     with _session() as session:
         rows = session.execute(text("SELECT count(*) FROM publication")).scalar()
+        # how far back the pool reaches: the demo queries fetched the newest papers, so this is a matter of weeks
+        oldest, newest = session.execute(
+            text("SELECT min(publication_datetime_utc)::date, max(publication_datetime_utc)::date FROM publication")
+        ).one()
         added = None
         if baseline:
             added = session.execute(
                 text("SELECT count(*) FROM publication WHERE id > :max_id"), {"max_id": baseline["max_id"]}
             ).scalar()
-    return {"rows": rows, "baseline_rows": baseline and baseline["rows"], "added": added}
+    return {
+        "rows": rows,
+        "baseline_rows": baseline and baseline["rows"],
+        "added": added,
+        "oldest": oldest and oldest.isoformat(),
+        "newest": newest and newest.isoformat(),
+    }
 
 
 def reset() -> dict:

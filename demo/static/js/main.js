@@ -23,6 +23,8 @@ class RunState {
     this.works = new Map(); // id -> {id, title, authors?, abstract?, publication_date?, hybridRank?}
     this.topics = []; // the matched topics
     this.corpus = null; // number of papers searched
+    this.pool = null; // {oldest, newest}: publication dates of the searched papers (recordings since 2026-09-27)
+    this.fetched = null; // the fetched event of a live fetch: how many papers, how far back, per topic
     this.rankings = {}; // method -> results (semantic and bm25: top 100, hybrid: the candidates)
     this.candidates = []; // ids in hybrid order, i.e. the reranker's input
     this.top = []; // ids in final order, growing while the reranker extracts them
@@ -54,6 +56,10 @@ class RunState {
         break;
       case "corpus":
         this.corpus = event.size;
+        if (event.oldest) this.pool = { oldest: event.oldest, newest: event.newest };
+        break;
+      case "fetched":
+        this.fetched = event;
         break;
       case "ranking":
         this.rankings[event.method] = event.results;
@@ -463,6 +469,7 @@ class App {
   updateControls() {
     const session = this.player.session;
     $("#run").disabled = Boolean(session);
+    $("#fetch").disabled = Boolean(session);
     $("#replay").disabled = Boolean(session) || !recordingList.length;
     $("#skip").hidden = !session;
     $("#stop").hidden = !session;
@@ -577,8 +584,8 @@ function setQuery(name, text, focus = true) {
   textarea.value = text;
   for (const chip of document.querySelectorAll(".chip")) chip.classList.toggle("active", chip.dataset.name === (name ?? ""));
   if (!name && focus) textarea.focus();
-  // a custom query is probably outside the pre-ingested corpus
-  $("#ingest").checked = !name;
+  // a custom query is probably outside the pre-fetched demo pool: fetch the newest papers of its topics first
+  $("#fetch").value = name ? "0" : "500";
   selectRecording();
 }
 
@@ -651,7 +658,7 @@ async function startLive() {
   }
   const since = (Date.now() - lastLiveRunEnd) / 1000;
   try {
-    await app.player.live({ query, query_name: queryName, ingest: $("#ingest").checked, n: 5, summaries: 3 }, { stepwise: stepwise() });
+    await app.player.live({ query, query_name: queryName, fetch_per_topic: Number($("#fetch").value), n: 5, summaries: 3 }, { stepwise: stepwise() });
     if (since < 60) app.toast(`The last live run ended ${Math.round(since)} s ago: this one may hit the API's rate limit, and the ranking then takes longer (it retries).`);
   } catch (error) {
     const recording = recordingFor(queryName);
@@ -750,7 +757,7 @@ async function loadCorpus() {
     button.hidden = true;
     return;
   }
-  app.views.intro.setCorpus?.(status.rows);
+  app.views.intro.setCorpus?.(status.rows, status.oldest && { oldest: status.oldest, newest: status.newest });
   $("#corpus").textContent = `corpus: ${status.rows.toLocaleString("en-US")} papers${status.added ? `, ${status.added.toLocaleString("en-US")} of them from live fetches` : ""}`;
   button.hidden = !status.added;
   button.dataset.added = status.added ?? 0;

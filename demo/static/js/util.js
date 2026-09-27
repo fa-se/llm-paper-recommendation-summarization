@@ -32,6 +32,14 @@ export const fmt = {
   compact: (value) => (value >= 10000 ? `${(value / 1000).toFixed(0)}k` : value >= 1000 ? `${(value / 1000).toFixed(1)}k` : `${value}`),
 };
 
+// "2026-08-30" -> "30 Aug 2026"; a range within one year names the year once: "30 Aug – 26 Sep 2026"
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function day(iso, withYear = true) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d} ${MONTHS[m - 1]}${withYear ? ` ${y}` : ""}`;
+}
+export const dayRange = (from, to) => `${day(from, from.slice(0, 4) !== to.slice(0, 4))} – ${day(to)}`;
+
 export const words = (text) => (text ? text.trim().split(/\s+/).length : 0);
 
 // the steps of the page in presenting order: two intro steps, the four pipeline stages, and two closing steps

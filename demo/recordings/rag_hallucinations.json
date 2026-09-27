@@ -105,7 +105,9 @@
    "t": 0.932,
    "stage": null,
    "type": "corpus",
-   "size": 3509
+   "size": 3509,
+   "oldest": "2026-08-30",
+   "newest": "2026-09-26"
   },
   {
    "seq": 6,

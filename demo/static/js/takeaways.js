@@ -57,8 +57,16 @@ export class TakeawaysView {
       },
       {
         title: "No labels? Borrow them",
-        body: "No dataset has paragraph-long interest descriptions with relevance labels. So a paper's abstract is the query, and the papers it cites are the right answers. Hybrid search's top 10 held 6.7 cited papers, the LLM's 7.4. My thesis said +60\u00a0% for the LLM: an eval bug had lost the hybrid order. It's about +10\u00a0%.",
-        tag: "evaluation, 30 queries, re-run 2026",
+        body: "No dataset has paragraph-long interest descriptions with relevance labels. So a paper's abstract is the query, and the papers it cites are the right answers. The cheap search does most of the work; the LLM adds about 10\u00a0%.",
+        // cited papers in the top 10, 30 queries (scripts/eval_reranking.py)
+        bars: [
+          ["random 10 of 100", 2.2, "reference"],
+          ["keyword + meaning", 6.7],
+          ["+ LLM ranking", 7.4],
+          ["best possible", 9.2, "reference"],
+        ],
+        barsTitle: "cited papers in the top 10",
+        tag: "evaluation, 30 queries",
       },
       {
         title: "Two years later, with an AI agent",
@@ -68,8 +76,34 @@ export class TakeawaysView {
     ];
     this.grid.replaceChildren(
       ...cards.map((card, i) =>
-        h("article", { class: "takeaway" }, h("div", { class: "takeaway-num" }, i + 1), h("h3", {}, card.title), h("p", {}, card.body), h("div", { class: "takeaway-tag" }, card.tag)),
+        h(
+          "article",
+          { class: "takeaway" },
+          h("div", { class: "takeaway-num" }, i + 1),
+          h("h3", {}, card.title),
+          h("p", {}, card.body),
+          card.bars ? miniBars(card.barsTitle, card.bars) : null,
+          h("div", { class: "takeaway-tag" }, card.tag),
+        ),
       ),
     );
   }
+}
+
+// a few values on a 0-10 scale; references (random, best possible) in gray, the pipeline's results in the accent
+function miniBars(title, bars) {
+  return h(
+    "div",
+    { class: "mini-bars", role: "img", "aria-label": `${title}: ${bars.map(([label, value]) => `${label} ${value}`).join(", ")}` },
+    h("div", { class: "mini-title" }, title),
+    ...bars.map(([label, value, kind]) =>
+      h(
+        "div",
+        { class: `mini-row${kind ? ` ${kind}` : ""}` },
+        h("span", { class: "mini-label" }, label),
+        h("span", { class: "mini-track" }, h("span", { class: "mini-bar", style: { width: `${value * 10}%` } })),
+        h("span", { class: "mini-value" }, value.toFixed(1)),
+      ),
+    ),
+  );
 }

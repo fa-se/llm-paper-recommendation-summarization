@@ -36,9 +36,6 @@
         </label>
         <label class="field">recording <select id="recordings" aria-label="Recorded run"></select></label>
         <hr />
-        <label class="check" title="Fetch and embed the newest papers on the query's topics first (needed for a query outside the demo corpus)"
-          ><input type="checkbox" id="ingest" /> live runs: fetch new papers first (+20–60 s)</label
-        >
         <div class="corpus-row">
           <span id="corpus" class="status"></span>
           <button id="reset-corpus" class="small" type="button" hidden title="Delete the papers that live runs fetched, and rebuild the BM25 index">Reset corpus</button>
@@ -63,7 +60,18 @@
       <textarea id="query" rows="1" spellcheck="false" aria-label="Research interest"></textarea>
       <button id="expand-query" class="small ghost" type="button" title="Show the whole description">▾</button>
       <div class="run-buttons">
-        <button id="run" type="button" title="Run the pipeline now, with real API calls (~25 s, ~$0.03)">▶ Run live</button>
+        <select
+          id="fetch"
+          aria-label="Papers to search"
+          title="Search only the pre-fetched demo pool, or first fetch the newest papers of each matched topic from OpenAlex (a description outside the demo pool needs this). Times and costs are upper bounds: papers already in the pool are skipped."
+        >
+          <option value="0">search the demo pool</option>
+          <option value="100">+ fetch 100 per topic · ~15 s · ≤$0.05</option>
+          <option value="250">+ fetch 250 per topic · ~25 s · ≤$0.12</option>
+          <option value="500">+ fetch 500 per topic · ~45 s · ≤$0.23</option>
+          <option value="1000">+ fetch 1,000 per topic · ~1.5 min · ≤$0.45</option>
+        </select>
+        <button id="run" type="button" title="Run the pipeline now, with real API calls (~25 s, ~$0.03, plus the fetch)">▶ Run live</button>
         <button id="replay" type="button" title="Play a recorded run of this query (no network needed)">▶ Replay</button>
         <button id="skip" class="small" type="button" hidden>Skip to end</button>
         <button id="stop" class="small" type="button" hidden>Stop</button>

@@ -89,7 +89,7 @@ export class Pipeline {
         break;
       case "stage_start":
         if (group) this.items[group].classList.add("running");
-        if (event.stage === "fetch") this.setFunnel("topics", "10", "topics: fetching their newest papers…");
+        if (event.stage === "fetch") this.setFunnel("topics", "10", event.per_topic ? `topics: fetching the newest ${fmt.int(event.per_topic)} of each…` : "topics: fetching their newest papers…");
         if (event.stage === "embed") this.setFunnel("topics", "10", `topics: embedding ${fmt.int(event.works)} new papers…`);
         if (event.stage === "index") this.setFunnel("topics", "10", "topics: updating the keyword index…");
         break;

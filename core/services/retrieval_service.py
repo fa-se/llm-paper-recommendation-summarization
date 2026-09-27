@@ -17,7 +17,7 @@ from enum import Enum
 
 from core.instrumentation import current_trace
 from core.llm_interfaces import LLMInterface
-from core.openalex import fetch_works_by_topics
+from core.openalex import fetch_works_by_topics, fetch_works_per_topic
 from core.repositories.publication_repository import PublicationRepository, Ranking
 from core.repositories.topic_repository import TopicRepository
 from core.services.deduplication import DuplicateFilter, has_usable_abstract
@@ -60,6 +60,14 @@ def weighted_sum(rankings: Sequence[Ranking], weights: Sequence[float]) -> Ranki
     return dict(sorted(scores.items(), key=lambda item: item[1], reverse=True))
 
 
+def _oldest(works: Sequence[Work]) -> str | None:
+    return min(work.publication_date for work in works).date().isoformat() if works else None
+
+
+def _newest(works: Sequence[Work]) -> str | None:
+    return max(work.publication_date for work in works).date().isoformat() if works else None
+
+
 class RetrievalService:
     def __init__(
         self, publication_repository: PublicationRepository, topic_repository: TopicRepository, llm: LLMInterface
@@ -71,9 +79,15 @@ class RetrievalService:
         self._embed_query = functools.lru_cache(maxsize=32)(llm.create_embedding)
 
     def ingest(
-        self, query: str, start_date: datetime, limit: int | None = None, num_topics: int = 5
+        self,
+        query: str,
+        start_date: datetime,
+        limit: int | None = None,
+        num_topics: int = 5,
+        per_topic: int | None = None,
     ) -> tuple[list[Topic], list[Work]]:
-        """Adds the newest works (up to limit) on the query's num_topics topics, published since start_date.
+        """Adds the newest works on the query's num_topics topics, published since start_date: up to limit over all
+        topics together, or, with per_topic, up to per_topic of each topic (then limit is ignored).
 
         Returns the matched topics and the added works. search() ranks the whole corpus, not only the works fetched
         for this query, so works ingested for earlier queries can show up as well.
@@ -81,9 +95,29 @@ class RetrievalService:
         trace = current_trace()
         topics = self.match_topics(query, num_topics)
 
-        with trace.stage("fetch", limit=limit):
-            works = fetch_works_by_topics([topic.id for topic in topics], start_date, limit)
+        with trace.stage("fetch", limit=limit, per_topic=per_topic):
+            if per_topic:
+                by_topic = fetch_works_per_topic([topic.id for topic in topics], start_date, per_topic)
+                # a work has one primary topic, so the lists don't overlap; drop repeats anyway
+                works = list({work.id: work for topic_works in by_topic.values() for work in topic_works}.values())
+            else:
+                by_topic = None
+                works = fetch_works_by_topics([topic.id for topic in topics], start_date, limit)
             accessed = datetime.now(UTC)
+            # how far back the fetched works reach: the newest-first fetch stops at the limit, not at a date
+            trace.emit(
+                "fetched",
+                count=len(works),
+                per_topic=per_topic,
+                oldest=_oldest(works),
+                newest=_newest(works),
+                topics=[
+                    {"id": topic.id, "count": len(by_topic[topic.id]), "oldest": _oldest(by_topic[topic.id])}
+                    for topic in topics
+                ]
+                if by_topic is not None
+                else None,
+            )
 
         with trace.stage("filter"):
             new_works = self._filter_new_works(works)

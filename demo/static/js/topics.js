@@ -5,7 +5,7 @@
 // The map shows where the matches sit in the taxonomy; the list shows how similar they are. The details drawer
 // (details.js) explains this for the audience.
 
-import { cssVar, fmt, h, openalexUrl, tooltip, viewHead } from "./util.js";
+import { cssVar, day, dayRange, fmt, h, openalexUrl, tooltip, viewHead } from "./util.js";
 
 export class TopicsView {
   constructor(root) {
@@ -14,6 +14,8 @@ export class TopicsView {
     this.zoomButton = h("button", { class: "small", onclick: () => this.zoom(!this.zoomed) }, "Whole map");
     this.list = h("ol", { class: "topic-list" });
     this.note = h("p", { class: "note" });
+    // what the next steps search, and how far back it reaches
+    this.poolNote = h("p", { class: "pool-note" });
     root.append(
       viewHead(
         "topics",
@@ -35,7 +37,7 @@ export class TopicsView {
             this.zoomButton,
           ),
         ),
-        h("div", { class: "side" }, h("h3", {}, "The 10 closest topics"), h("div", { class: "list-head" }, h("span"), h("span", {}, "topic"), h("span", {}, "similarity to the description")), this.list, this.note),
+        h("div", { class: "side" }, h("h3", {}, "The 10 closest topics, by similarity (0–1)"), this.poolNote, this.list, this.note),
       ),
     );
     this.view = { x: 0, y: 0, k: 1 }; // the visible part of the unit square: origin and zoom
@@ -66,17 +68,45 @@ export class TopicsView {
     this.draw();
   }
 
-  reset() {
+  reset(run) {
+    this.run = run;
     this.matches = [];
     this.list.replaceChildren(h("li", { class: "empty" }, "Run a query or replay a recording to see where it lands."));
     this.note.textContent = "";
+    this.poolNote.replaceChildren();
+    this.filtered = null;
     this.zoom(false, false);
   }
 
   onEvent(event, run) {
+    this.run = run;
     if (event.type === "topics") this.showMatches(event.topics);
-    if (event.type === "corpus") this.corpus = event.size;
-    if (event.type === "filtered") this.note.textContent = `Fetched ${fmt.int(event.fetched)} papers for these topics: ${fmt.int(event.new)} new, ${fmt.int(event.already_present)} already in the corpus, ${fmt.int(event.duplicates)} duplicates, ${fmt.int(event.unusable)} without a usable abstract.`;
+    if (event.type === "fetched" && event.topics) this.showMatches(run.topics);
+    if (event.type === "filtered") this.filtered = event;
+    if (["corpus", "fetched", "filtered"].includes(event.type)) this.renderPool(run);
+  }
+
+  // a live fetch per topic: how many papers of this topic, and how far back they reach (big topics: weeks, small: months)
+  fetchedMeta(topicId) {
+    const fetched = this.run?.fetched?.topics?.find((topic) => topic.id === topicId);
+    if (!fetched) return null;
+    return h("span", { class: "topic-fetched" }, ` · ${fmt.int(fetched.count)} fetched${fetched.oldest ? `, back to ${day(fetched.oldest)}` : ""}`);
+  }
+
+  // the pool the next steps search: its size and date range, and what a live fetch added
+  renderPool(run) {
+    const parts = [];
+    const fetched = run.fetched;
+    if (fetched) {
+      const what = fetched.per_topic ? `the newest ${fmt.int(fetched.per_topic)} papers of each topic` : `the newest ${fmt.int(fetched.count)} papers of these topics`;
+      const filtered = this.filtered;
+      const counts = filtered ? `: ${fmt.int(filtered.new)} new, ${fmt.int(filtered.already_present)} already in the pool, ${fmt.int(filtered.duplicates + filtered.unusable)} duplicates or without an abstract` : "";
+      parts.push(h("strong", {}, "Fetched now: "), `${what}, back to ${fetched.oldest ? day(fetched.oldest) : "–"}${counts}. `);
+    }
+    if (run.corpus) {
+      parts.push(h("strong", {}, "Searched next: "), `${fmt.int(run.corpus)} papers`, run.pool ? ` published ${dayRange(run.pool.oldest, run.pool.newest)}` : "", run.meta.ingest ? "" : ", fetched beforehand", ".");
+    }
+    this.poolNote.replaceChildren(...parts);
   }
 
   async showMatches(topics) {
@@ -102,7 +132,7 @@ export class TopicsView {
             "div",
             { class: "topic-text" },
             h("div", { class: "topic-name" }, h("a", { class: "openalex-link", href: openalexUrl(match.id, "T"), target: "_blank", rel: "noopener" }, match.name)),
-            h("div", { class: "topic-meta" }, `${match.topic.subfield} · ${match.topic.field}`),
+            h("div", { class: "topic-meta" }, `${match.topic.subfield} · ${match.topic.field}`, this.fetchedMeta(match.id)),
           ),
           h(
             "div",

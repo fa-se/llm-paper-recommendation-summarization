@@ -16,6 +16,8 @@ export class HeapView {
     this.decision = h("div", { class: "decision" });
     this.counters = h("dl", { class: "counters" });
     this.prompt = h("pre", { class: "prompt" });
+    // what the sort is doing right now, in plain words
+    this.phase = h("div", { class: "heap-phase" });
     root.append(
       viewHead(
         "rerank",
@@ -25,17 +27,20 @@ export class HeapView {
       h(
         "div",
         { class: "heap-layout" },
-        h("div", { class: "heap-panel" }, this.svg),
+        h("div", { class: "heap-panel" }, this.phase, this.svg),
         h(
           "div",
           { class: "side" },
+          h("h3", { class: "legend-title" }, "How to read the tree"),
           h(
             "ul",
             { class: "heap-legend" },
             h("li", {}, h("i", { class: "lg-node" }, "12"), "a candidate; the number is its rank in the search"),
-            h("li", {}, h("i", { class: "lg-cmp" }), "being compared right now (three at a time)"),
-            h("li", {}, h("i", { class: "lg-spec" }), "asked ahead of time, in case it's needed"),
-            h("li", {}, h("i", { class: "lg-final" }), "the winner of a round moves up; the best go to the podium"),
+            h("li", {}, h("i", { class: "lg-cmp" }), "three being compared right now: a parent and its two children"),
+            h("li", {}, h("i", { class: "lg-spec" }), "a comparison asked ahead, in case it's needed"),
+            h("li", {}, h("i", { class: "lg-flash" }), "flash: the LLM's pick among the three"),
+            h("li", {}, h("i", { class: "lg-swap" }, "↕"), "two circles trade places: the pick moves up, the parent down"),
+            h("li", {}, h("i", { class: "lg-final" }), "a circle flies right: the top of the tree is the next best paper"),
           ),
           this.counters,
           h("h3", {}, "Latest decision"),
@@ -64,6 +69,7 @@ export class HeapView {
     this.podium = s("g", { class: "podium" });
     this.svg.append(this.edgeLayer, this.overlay, this.podium, this.nodeLayer);
     this.decision.replaceChildren(h("p", { class: "empty" }, "No comparison yet."));
+    this.setPhase(null);
     this.prompt.textContent = "";
     this.renderCounters();
     this.layout();
@@ -74,6 +80,7 @@ export class HeapView {
     switch (event.type) {
       case "heap_init":
         this.init(event.docids, event.num_child, event.k);
+        this.setPhase("build");
         break;
       case "compare_start":
         this.compareStart(event);
@@ -90,6 +97,7 @@ export class HeapView {
       }
       case "ranked":
         this.rank(event);
+        this.setPhase(event.rank >= (this.k ?? 5) ? "done" : "extract", event.rank);
         break;
       case "reranked":
         this.stats.used = event.used_calls;
@@ -275,6 +283,26 @@ export class HeapView {
     // the prompt as SetwiseComparisonTask builds it (core/llm_interfaces/tasks.py)
     const passages = comparison.docids.map((docid, i) => `Passage ${labels[i]}: "${this.run.work(docid).abstract ?? "…"}"`).join("\n\n");
     this.prompt.textContent = `[system] ${SYSTEM_PROMPT}\n\n[user] Given a query "${this.run.meta.query}", which of the following passages is the most relevant one to the query?\n\n${passages}\n\nOutput only the passage label of the most relevant passage.`;
+  }
+
+  setPhase(phase, rank) {
+    const k = this.k ?? 5;
+    const texts = {
+      build: [
+        "1 · Build the tree.",
+        ` The LLM looks at each family of three (a parent and its two children) and picks the best; the pick moves up. Once every parent beats its children, the top of the tree is the best of all ${this.size || 50}.`,
+      ],
+      extract: [
+        `2 · Take the best off the top: #${rank} found.`,
+        " It trades places with the tree's last paper and flies to the podium. The paper now on top sinks down, family by family, until it beats both its children; then the top is the best of the rest.",
+      ],
+      done: [
+        `Done: the top ${k}.`,
+        ` The sort stops here. The paper now at the top was only moved there, never compared, and the other ${Math.max(0, (this.heap?.length ?? 50) - k)} stay only partly sorted. That's what makes a top ${k} cheap.`,
+      ],
+    };
+    this.phase.hidden = !phase;
+    if (phase) this.phase.replaceChildren(h("strong", {}, texts[phase][0]), texts[phase][1]);
   }
 
   renderCounters() {
