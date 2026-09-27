@@ -652,11 +652,14 @@ textarea {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+/* the track is the highest possible score; the fill is the dense part, then the BM25 part */
 .contrib {
   display: flex;
   gap: 2px;
   height: 4px;
   margin-top: 3px;
+  background: var(--grid);
+  border-radius: 2px;
 }
 .contrib .seg {
   height: 100%;
@@ -702,6 +705,9 @@ textarea {
 }
 .contrib-legend .seg.keyword {
   background: var(--axis);
+}
+.contrib-legend .seg.track {
+  background: var(--grid);
 }
 .fold-row .row-title {
   font-weight: 400 !important;

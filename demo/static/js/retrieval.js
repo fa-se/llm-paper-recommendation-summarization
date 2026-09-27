@@ -19,18 +19,19 @@ const COLUMNS = [
 // missing from one ranking gets 0 there), or by reciprocal rank fusion. Insertion order breaks ties, as in Python.
 export function blend(semantic, bm25, mode, weight) {
   const scores = new Map();
-  const add = (id, dense, keyword) => {
-    const entry = scores.get(id) ?? { id, dense: 0, bm25: 0 };
-    entry.dense += dense;
-    entry.bm25 += keyword;
+  // each part keeps its input (the normalized score, or the rank for RRF), so that tooltips can show the arithmetic
+  const add = (id, part, value, input) => {
+    const entry = scores.get(id) ?? { id, dense: 0, bm25: 0, denseInput: null, bm25Input: null };
+    entry[part] += value;
+    entry[`${part}Input`] = input;
     scores.set(id, entry);
   };
   if (mode === "rrf") {
-    semantic.forEach((result, i) => add(result.id, 1 / (RRF_K + i + 1), 0));
-    bm25.forEach((result, i) => add(result.id, 0, 1 / (RRF_K + i + 1)));
+    semantic.forEach((result, i) => add(result.id, "dense", 1 / (RRF_K + i + 1), i + 1));
+    bm25.forEach((result, i) => add(result.id, "bm25", 1 / (RRF_K + i + 1), i + 1));
   } else {
-    semantic.forEach((result) => add(result.id, weight * result.normalized, 0));
-    bm25.forEach((result) => add(result.id, 0, (1 - weight) * result.normalized));
+    semantic.forEach((result) => add(result.id, "dense", weight * result.normalized, result.normalized));
+    bm25.forEach((result) => add(result.id, "bm25", (1 - weight) * result.normalized, result.normalized));
   }
   return [...scores.values()].map((entry) => ({ ...entry, score: entry.dense + entry.bm25 })).sort((a, b) => b.score - a.score);
 }
@@ -159,7 +160,8 @@ export class RetrievalView {
       this.poolStat.textContent = `Top 50 of this blend: ${kept} of the 50 reranked candidates${top.length ? `, ${topKept} of the final top ${top.length}` : ""}`;
     } else this.poolStat.textContent = hybrid ? "Blend as in the recorded run" : "";
 
-    const maxHybrid = hybrid?.length ? hybrid[0].score : 1;
+    // the bar's full length is the highest possible score: first in both lists (weighted: 1, RRF: 2 / (k + 1))
+    const maxHybrid = this.mode === "rrf" ? 2 / (RRF_K + 1) : 1;
     this.grid.replaceChildren(
       ...COLUMNS.map((column) => {
         const list = lists[column.key];
@@ -185,7 +187,16 @@ export class RetrievalView {
         }
         const legend =
           column.key === "hybrid"
-            ? h("span", { class: "contrib-legend" }, h("i", { class: "seg dense" }), "dense part", h("i", { class: "seg keyword" }), "BM25 part")
+            ? h(
+                "span",
+                { class: "contrib-legend" },
+                h("i", { class: "seg dense" }),
+                "dense part",
+                h("i", { class: "seg keyword" }),
+                "BM25 part",
+                h("i", { class: "seg track" }),
+                "full: #1 in both",
+              )
             : null;
         return h("section", { class: `rank-col col-${column.key}` }, h("h3", {}, column.title, legend), h("div", { class: "col-sub" }, sub), body);
       }),
@@ -219,9 +230,23 @@ export class RetrievalView {
       ),
       h("span", { class: "score" }, column.score(result)),
     );
-    attachTip(element, () => paperTip(work, this.rankSummary(result.id)));
+    attachTip(element, () => {
+      const tip = paperTip(work, this.rankSummary(result.id));
+      if (column.key === "hybrid") tip.insertBefore(h("div", { class: "tip-meta" }, this.scoreSummary(result)), tip.querySelector(".tip-body"));
+      return tip;
+    });
     this.hoverable(element, result.id);
     return element;
+  }
+
+  // the arithmetic behind a hybrid score and its bar
+  scoreSummary(result) {
+    const part = (name, value, input, weight) => {
+      if (input === null) return `${name} 0 (not in its top 100)`;
+      return this.mode === "rrf" ? `${name} 1 / (${RRF_K} + ${input}) = ${value.toFixed(4)}` : `${name} ${weight.toFixed(2)} × ${input.toFixed(3)} = ${value.toFixed(3)}`;
+    };
+    const max = this.mode === "rrf" ? (2 / (RRF_K + 1)).toFixed(4) : "1";
+    return `${part("dense", result.dense, result.denseInput, this.weight)} + ${part("BM25", result.bm25, result.bm25Input, 1 - this.weight)} = ${result.score.toFixed(this.mode === "rrf" ? 4 : 3)} (max ${max})`;
   }
 
   foldRow(column, id, pool) {
@@ -240,11 +265,21 @@ export class RetrievalView {
     return element;
   }
 
+  // where a paper ranks in each column; the LLM only orders its top k, the other candidates stay unranked
   rankSummary(id) {
-    const names = { bm25: "BM25", semantic: "dense", hybrid: "hybrid", rerank: "final" };
-    return Object.entries(this.ranks)
-      .map(([key, ranks]) => `${names[key]} ${ranks.has(id) ? `#${ranks.get(id)}` : "–"}`)
-      .join(" · ");
+    const ranks = this.ranks;
+    const k = this.run?.meta?.n ?? 5;
+    const llm = ranks.rerank.has(id)
+      ? `LLM #${ranks.rerank.get(id)}`
+      : this.run?.candidates?.includes(id)
+        ? `LLM: not in its top ${k} (ranks below ${k} aren't computed)`
+        : "LLM: not a candidate";
+    return [
+      `BM25 ${ranks.bm25.has(id) ? `#${ranks.bm25.get(id)}` : "not in top 100"}`,
+      `dense ${ranks.semantic.has(id) ? `#${ranks.semantic.get(id)}` : "not in top 100"}`,
+      `hybrid ${ranks.hybrid.has(id) ? `#${ranks.hybrid.get(id)}` : "not in top 50"}`,
+      llm,
+    ].join(" · ");
   }
 
   hoverable(element, id) {
