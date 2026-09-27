@@ -89,6 +89,11 @@ Every successful live run is saved to `demo/recordings/`; a replay plays such a 
 original timing, without database or API key (`coral_reefs.json` and `rag_hallucinations.json` are committed). Keys
 1-4 switch between the stages; with "stage by stage", a replay pauses before each stage (space continues).
 
+A live run with "fetch new papers first" adds papers to the corpus (and so changes every paper's BM25 statistics).
+"Reset corpus" in the page, or `uv run --env-file .env python -m demo.corpus reset`, deletes them again and rebuilds the
+BM25 index, which restores the baseline in `demo/corpus_baseline.json` exactly (checked by a checksum over all BM25
+vectors); `python -m demo.corpus snapshot` makes the current corpus the baseline.
+
 ## Setup
 
 ### Prerequisites

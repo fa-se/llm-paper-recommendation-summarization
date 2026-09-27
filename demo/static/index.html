@@ -30,6 +30,10 @@
             ><input type="checkbox" id="ingest" /> fetch new papers first (+20–60 s)</label
           >
         </div>
+        <div class="control-row corpus-row">
+          <span id="corpus" class="status"></span>
+          <button id="reset-corpus" class="small" type="button" hidden title="Delete the papers that live runs fetched, and rebuild the BM25 index">Reset corpus</button>
+        </div>
         <div class="control-row">
           <select id="recordings" aria-label="Recorded run"></select>
           <select id="speed" aria-label="Replay speed">

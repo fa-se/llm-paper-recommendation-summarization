@@ -139,6 +139,12 @@ button.primary:hover:not(:disabled) {
   background: var(--accent);
   filter: brightness(1.08);
 }
+button.danger,
+button.danger:hover:not(:disabled) {
+  background: var(--critical);
+  color: #ffffff;
+  border-color: transparent;
+}
 button.small {
   padding: 3px 10px;
   font-size: 0.85rem;

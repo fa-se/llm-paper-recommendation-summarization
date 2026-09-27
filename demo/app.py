@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 import core
 from core.instrumentation import Trace
+from demo import corpus
 from scripts.demo_queries import DEMO_QUERIES, START_DATE
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,28 @@ def config():
         "ingest_limit": INGEST_LIMIT,
         "busy": _busy.locked(),
     }
+
+
+@app.get("/api/corpus")
+def corpus_status():
+    """The corpus size, and how many papers live runs have added since the baseline (demo/corpus.py)."""
+    try:
+        return corpus.status()
+    except Exception as error:  # e.g. no database: replays still work
+        return {"error": f"{type(error).__name__}: {error}"}
+
+
+@app.post("/api/corpus/reset")
+async def corpus_reset():
+    """Deletes the papers that live runs added since the baseline, and rebuilds the BM25 index."""
+    if not _busy.acquire(blocking=False):
+        raise HTTPException(409, "A run is in progress")
+    try:
+        return await asyncio.wrap_future(_worker.submit(corpus.reset))
+    except RuntimeError as error:
+        raise HTTPException(400, str(error)) from error
+    finally:
+        _busy.release()
 
 
 @app.get("/api/recordings")

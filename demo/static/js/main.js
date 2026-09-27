@@ -252,6 +252,7 @@ class App {
     this.setPaused(false);
     this.updateControls();
     loadRecordings();
+    loadCorpus();
   }
 
   setPaused(paused, group) {
@@ -385,6 +386,64 @@ $("#replay").addEventListener("click", async () => {
   app.updateControls();
 });
 
+// the corpus: its size, and a reset that removes what live runs with "fetch new papers first" added
+async function loadCorpus() {
+  let status;
+  try {
+    status = await (await fetch("/api/corpus")).json();
+  } catch {
+    return;
+  }
+  const button = $("#reset-corpus");
+  if (status.error) {
+    $("#corpus").textContent = "database not reachable: replays only";
+    button.hidden = true;
+    return;
+  }
+  $("#corpus").textContent = `corpus: ${status.rows.toLocaleString("en-US")} papers${status.added ? `, ${status.added.toLocaleString("en-US")} of them from live fetches` : ""}`;
+  button.hidden = !status.added;
+  button.dataset.added = status.added ?? 0;
+  resetArmed(false);
+}
+
+const papers = (n) => `${n.toLocaleString("en-US")} paper${n === 1 ? "" : "s"}`;
+
+// a reset deletes papers, so it takes a second click
+function resetArmed(armed) {
+  const button = $("#reset-corpus");
+  button.dataset.armed = armed ? "1" : "";
+  const n = Number(button.dataset.added);
+  button.textContent = armed ? `Click again: delete ${n} paper${n === 1 ? "" : "s"}` : "Reset corpus";
+  button.classList.toggle("danger", armed);
+  clearTimeout(resetArmed.timer);
+  if (armed) resetArmed.timer = setTimeout(() => resetArmed(false), 4000);
+}
+
+$("#reset-corpus").addEventListener("click", async () => {
+  const button = $("#reset-corpus");
+  if (!button.dataset.armed) {
+    resetArmed(true);
+    return;
+  }
+  resetArmed(false);
+  button.disabled = true;
+  button.textContent = "Resetting…";
+  try {
+    const response = await fetch("/api/corpus/reset", { method: "POST" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail ?? `HTTP ${response.status}`);
+    app.toast(
+      result.exact
+        ? `Removed ${papers(result.deleted)} and rebuilt the BM25 index: the corpus is the demo baseline again.`
+        : `Removed ${papers(result.deleted)}, but the corpus differs from the baseline (${papers(result.rows)}).`,
+    );
+  } catch (error) {
+    app.toast(`Reset failed: ${error.message}`);
+  }
+  button.disabled = false;
+  loadCorpus();
+});
+
 $("#speed").addEventListener("change", () => app.player.setSpeed(Number($("#speed").value)));
 $("#continue").addEventListener("click", () => app.player.resume());
 $("#skip").addEventListener("click", () => app.player.skipToEnd());
@@ -427,3 +486,4 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () 
 
 loadConfig();
 loadRecordings();
+loadCorpus();
