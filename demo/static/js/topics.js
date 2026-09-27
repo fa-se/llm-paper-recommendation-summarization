@@ -1,5 +1,8 @@
 // Stage 1, topic routing: all 4,516 OpenAlex topics on a 2D map (UMAP of their embeddings, scripts/make_topic_map.py),
 // the query's 10 most similar topics highlighted, and the list of those topics with their cosine similarity.
+// The query itself isn't drawn: a paragraph-long description is about equally similar to all of its matches, and less
+// similar to them than they are to each other (coral: 0.56-0.64 vs 0.63-0.86), so no point on the map represents it.
+// The map shows where the matches sit in the taxonomy; the list shows how similar they are.
 
 import { cssVar, fmt, h, tooltip } from "./util.js";
 
@@ -10,6 +13,7 @@ export class TopicsView {
     this.zoomButton = h("button", { class: "small", onclick: () => this.zoom(!this.zoomed) }, "Whole map");
     this.list = h("ol", { class: "topic-list" });
     this.note = h("p", { class: "note" });
+    this.range = h("p", { class: "note" });
     root.append(
       h(
         "div",
@@ -23,7 +27,7 @@ export class TopicsView {
             { class: "map-legend" },
             h("span", { class: "key" }, h("i", { class: "dot all" }), "OpenAlex topic"),
             h("span", { class: "key" }, h("i", { class: "dot match" }), "top-10 match (rank)"),
-            h("span", { class: "key" }, h("i", { class: "star" }, "★"), "query, drawn among its matches"),
+            h("span", { class: "map-caveat" }, "map distance is between topics, not to the query"),
             this.zoomButton,
           ),
         ),
@@ -38,6 +42,7 @@ export class TopicsView {
             "The newest papers of the top 10 topics form the corpus; everything later ranks that corpus.",
           ),
           this.list,
+          this.range,
           this.note,
         ),
       ),
@@ -72,7 +77,7 @@ export class TopicsView {
 
   reset() {
     this.matches = [];
-    this.query = null;
+    this.range.textContent = "";
     this.list.replaceChildren(h("li", { class: "empty" }, "Run a query or replay a recording to see where it lands."));
     this.note.textContent = "";
     this.zoom(false, false);
@@ -89,15 +94,10 @@ export class TopicsView {
     await this.data;
     if (!this.topics) return;
     this.matches = topics.map((match, i) => ({ ...match, rank: i + 1, topic: this.byId.get(match.id) })).filter((match) => match.topic);
-    // the query itself isn't projected (UMAP can't cheaply place a new point); it's drawn at the similarity-weighted
-    // center of its matches, with the most similar ones weighing most
-    const best = Math.max(...this.matches.map((match) => match.similarity));
-    const weights = this.matches.map((match) => Math.exp((match.similarity - best) / 0.03));
-    const total = weights.reduce((a, b) => a + b, 0);
-    this.query = {
-      x: this.matches.reduce((sum, match, i) => sum + match.topic.x * weights[i], 0) / total,
-      y: this.matches.reduce((sum, match, i) => sum + match.topic.y * weights[i], 0) / total,
-    };
+    const similarities = this.matches.map((match) => match.similarity);
+    this.range.textContent = this.matches.length
+      ? `Cosine similarity to the query spans only ${Math.min(...similarities).toFixed(3)}–${Math.max(...similarities).toFixed(3)} across these ${this.matches.length}; the query is about equally close to all of them, so it has no faithful point on the map.`
+      : "";
     const maxSimilarity = Math.max(...this.matches.map((m) => m.similarity), 0.01);
     this.list.replaceChildren(
       ...this.matches.map((match) =>
@@ -141,8 +141,8 @@ export class TopicsView {
     this.zoomButton.disabled = !this.matches.length;
     let target = { x: 0, y: 0, k: 1 };
     if (this.zoomed) {
-      const xs = [...this.matches.map((m) => m.topic.x), this.query.x];
-      const ys = [...this.matches.map((m) => m.topic.y), this.query.y];
+      const xs = this.matches.map((m) => m.topic.x);
+      const ys = this.matches.map((m) => m.topic.y);
       const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
       const size = Math.min(1, Math.max(x1 - x0, y1 - y0, 0.18) * 1.5);
       target = { x: (x0 + x1) / 2 - size / 2, y: (y0 + y1) / 2 - size / 2, k: 1 / size };
@@ -222,18 +222,6 @@ export class TopicsView {
       ctx.fillText(label.name, x, y);
     }
     if (this.matches.length) {
-      const [qx, qy] = this.px(this.query);
-      ctx.strokeStyle = color.accent;
-      ctx.globalAlpha = 0.45;
-      ctx.lineWidth = 1;
-      for (const match of this.matches) {
-        const [x, y] = this.px(match.topic);
-        ctx.beginPath();
-        ctx.moveTo(qx, qy);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
       ctx.font = "600 12px system-ui, sans-serif";
       for (const match of this.matches) {
         const [x, y] = this.px(match.topic);
@@ -252,12 +240,6 @@ export class TopicsView {
         ctx.fillStyle = color.ink;
         ctx.fillText(match.rank, x + r + 7, y + 4);
       }
-      ctx.font = "22px system-ui, sans-serif";
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = color.surface;
-      ctx.strokeText("★", qx, qy + 8);
-      ctx.fillStyle = color.ink;
-      ctx.fillText("★", qx, qy + 8);
     }
     if (this.hovered && !this.matches.some((match) => match.topic === this.hovered)) {
       const [x, y] = this.px(this.hovered);

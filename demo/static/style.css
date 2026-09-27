@@ -462,9 +462,9 @@ textarea {
   width: 10px;
   height: 10px;
 }
-.key .star {
-  font-style: normal;
-  color: var(--text-primary);
+.map-caveat {
+  color: var(--text-muted);
+  font-style: italic;
 }
 .topic-list {
   list-style: none;
