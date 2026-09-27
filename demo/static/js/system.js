@@ -71,7 +71,7 @@ function diagram() {
     arrow(175, 316, 175, 378, "fetch newest papers", { dx: 10 }),
     arrow(500, 316, 500, 378, "store · search", { dx: 10 }),
     arrow(825, 316, 825, 378, "embed · compare · summarize", { dx: -10, anchor: "end" }),
-    box({ x: 40, y: 380, w: 270, height: 130, title: "OpenAlex API", lines: ["open catalogue of research", "327 M works, 4,516 topics", "free, no API key", "Python client: pyalex"] }),
+    box({ x: 40, y: 380, w: 270, height: 130, title: "OpenAlex API", lines: ["open catalogue of research", "327 M works, 4,516 topics", "free data (CC0), free API", "Python client: pyalex"] }),
     box({ x: 365, y: 380, w: 270, height: 136, kind: "db", title: "PostgreSQL 16 (Docker)", lines: ["pgvector: meaning search", "pg_bestmatch.rs: BM25 search", "4,516 topics, 3,509 papers", "no separate vector database"] }),
     box({ x: 690, y: 380, w: 270, height: 130, title: "OpenAI API", lines: ["text-embedding-3-large: vectors", "gpt-6-luna: comparisons", "gpt-6-sol: summaries", "≈ $0.03 per query"] }),
   );

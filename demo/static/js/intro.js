@@ -24,7 +24,7 @@ const TYPICAL = {
   summaries: { duration: 7.8, cost: 0.0206, calls: 3 },
 };
 
-const BAND = 160; // px: height of the funnel's bar band
+const BAND = 140; // px: height of the funnel's bar band
 const barHeight = (count) => Math.max(8, (Math.log10(Math.max(count, 1)) / Math.log10(OPENALEX_WORKS)) * BAND);
 
 export class IntroView {
@@ -51,7 +51,7 @@ export class IntroView {
             "div",
             { class: "big-stat" },
             h("span", { class: "big-number" }, `${(WORKS_2025 / 1e6).toFixed(1)} million`),
-            h("span", { class: "big-label" }, `scholarly works published in 2025: about ${fmt.int(Math.round(WORKS_2025 / 365 / 1000) * 1000)} a day`, h("span", { class: "source" }, " (OpenAlex)")),
+            h("span", { class: "big-label" }, `works published in 2025, ~${fmt.int(Math.round(WORKS_2025 / 365 / 1000) * 1000)} a day`, h("span", { class: "source" }, " (OpenAlex)")),
           ),
           h("p", {}, "Search engines for research want keywords and Boolean logic, like this Scopus query:"),
           h("pre", { class: "boolean" }, '( SUBJAREA ( comp ) OR SUBJAREA ( engi ) )\nAND ( KEY ( "vehicle to vehicle communications" )\n      OR TITLE-ABS-KEY ( v2x ) )\nAND PUBYEAR > 2023'),
@@ -65,6 +65,36 @@ export class IntroView {
           h("p", { class: "idea-line" }, h("span", { class: "idea-tag" }, "Out"), h("span", {}, "the newest papers that match it, ranked, each with a short summary of why it matters to you.")),
           h("p", { class: "idea-note" }, "No keywords, no citation counts, no click history."),
           h("p", { class: "idea-note" }, "Master's thesis at TU Berlin: topic chosen late 2023, submitted August 2024, brought back to life for this demo."),
+        ),
+        // where the papers come from, and the topic taxonomy that the first stage routes into (facts: help.openalex.org)
+        h(
+          "section",
+          { class: "intro-card openalex" },
+          h("h3", { class: "kicker" }, "Where the papers come from"),
+          h(
+            "p",
+            {},
+            h("strong", {}, "OpenAlex"),
+            `: an open index of the world's research, successor to Microsoft Academic Graph. ${Math.round(OPENALEX_WORKS / 1e6)} M works with authors, venues and citations; free data (CC0), free API.`,
+          ),
+          h("p", {}, "It files every paper under research topics, in four levels:"),
+          h(
+            "div",
+            { class: "taxonomy", role: "img", "aria-label": "4 domains, 26 fields, 252 subfields, 4,516 topics" },
+            ...[
+              ["4", "domains"],
+              ["26", "fields"],
+              ["252", "subfields"],
+              ["4,516", "topics"],
+            ].flatMap(([count, level], i) => [i ? h("span", { class: "tax-arrow", "aria-hidden": "true" }, "→") : null, h("span", { class: "tax-level" }, h("strong", {}, count), ` ${level}`)]),
+          ),
+          h("p", { class: "taxonomy-example" }, "e.g. Physical Sciences → Computer Science → AI → Natural Language Processing"),
+          h(
+            "p",
+            { class: "idea-note" },
+            "Topics are clusters of the citation network, named by an LLM; a classifier files each paper under them. ",
+            h("a", { class: "ext-link", href: "https://help.openalex.org/data/topics/", target: "_blank", rel: "noopener" }, "How OpenAlex topics work ↗"),
+          ),
         ),
       ),
       h("section", { class: "funnel-section" }, h("h3", { class: "kicker" }, "How: a funnel, from cheap to expensive"), this.funnel, this.funnelNote),

@@ -1441,8 +1441,8 @@ textarea {
 /* --- intro --- */
 .intro-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
 }
 .intro-card {
   background: var(--surface-2);
@@ -1455,11 +1455,14 @@ textarea {
 .big-stat {
   display: flex;
   align-items: baseline;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
 }
+.big-stat .big-label {
+  font-size: 0.92rem;
+}
 .big-number {
-  font-size: 2.4rem;
+  font-size: 2.1rem;
   font-weight: 700;
   line-height: 1.05;
 }
@@ -1474,8 +1477,8 @@ textarea {
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 0.8rem;
+  padding: 6px 10px;
+  font-size: 0.76rem;
   color: var(--text-secondary);
   margin: 6px 0;
   white-space: pre;
@@ -1485,7 +1488,7 @@ textarea {
   display: flex;
   gap: 12px;
   align-items: baseline;
-  font-size: 1.2rem;
+  font-size: 1.12rem;
   line-height: 1.4;
 }
 .idea-tag {
@@ -1534,7 +1537,7 @@ textarea {
   font-weight: 600;
 }
 .f-band {
-  height: 160px;
+  height: 140px;
   width: 100%;
   display: flex;
   align-items: center;
@@ -2039,4 +2042,36 @@ body.no-timeline .timeline {
   max-width: 20em;
   font-size: 0.85rem;
   padding: 5px 8px;
+}
+
+/* intro: where the papers come from */
+.taxonomy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 4px 0;
+}
+.tax-level {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+.tax-arrow {
+  color: var(--text-muted);
+}
+.taxonomy-example {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.ext-link {
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ext-link:hover {
+  text-decoration: underline;
 }

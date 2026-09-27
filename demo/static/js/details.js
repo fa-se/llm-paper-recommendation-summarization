@@ -51,7 +51,7 @@ const CONTENT = {
         ["Is it used anywhere?", "No. It's a thesis prototype, a Python library without a UI; this page was built for today."],
         [
           "Why OpenAlex?",
-          "Nonprofit, free, an open API with generous rate limits, no key. The lesson from the thesis: other academic databases had tight rate limits, needed commercial access, or had usage policies against LLM processing.",
+          "Nonprofit, free data (CC0) and an open API with a free daily allowance; in 2024 it had generous rate limits and needed no key. The lesson from the thesis: other academic databases had tight rate limits, needed commercial access, or had usage policies against LLM processing.",
         ],
       ),
     ),
@@ -117,6 +117,11 @@ const CONTENT = {
         "How it works",
         p("The description is embedded (text-embedding-3-large, 1,024 dimensions) and compared by cosine similarity with the embeddings of all 4,516 OpenAlex topics, an exact search in Postgres. The 10 most similar topics are kept."),
         p("At ingest, OpenAlex returns the newest papers (since 1 Jan 2025, with an abstract) whose primary topic is one of the 10. The next steps search every paper fetched so far, not only this query's."),
+      ),
+      section(
+        "Where the topics come from",
+        p("OpenAlex (with CWTS Leiden) clustered works by their citations, had an LLM write a name and description for each cluster, and mapped the clusters to 252 subfields, 26 fields and 4 domains. A classifier gives every work up to three topics from its title, abstract, venue and citations; the best one is its primary topic, which this pipeline filters on. So the description is matched against LLM-written topic descriptions."),
+        p(h("a", { class: "ext-link", href: "https://help.openalex.org/data/topics/", target: "_blank", rel: "noopener" }, "OpenAlex: Topics ↗")),
       ),
       section(
         "How far back the pool reaches",
