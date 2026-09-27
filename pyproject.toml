@@ -22,7 +22,15 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["core"]
 
+[tool.uv]
+# the demo app (demo/) runs with a plain `uv run`
+default-groups = ["dev", "demo"]
+
 [dependency-groups]
+demo = [
+    "fastapi>=0.141.1",
+    "uvicorn>=0.54.0",
+]
 dev = [
     "ruff>=0.16.9",
 ]

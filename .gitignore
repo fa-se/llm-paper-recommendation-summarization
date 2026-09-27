@@ -27,3 +27,8 @@ instance/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# demo: the topic map and the curated replays are committed; auto-saved live runs are not
+!demo/static/topic_map.json
+!demo/recordings/coral_reefs.json
+!demo/recordings/rag_hallucinations.json

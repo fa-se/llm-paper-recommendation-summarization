@@ -60,11 +60,34 @@ core/
   openalex.py                   OpenAlex API access
   works.py, sqlalchemy_models.py  the pipeline's work objects, the database tables
   instrumentation.py            Trace: per-stage timings, tokens, cost and events
-scripts/                        smoke test, traced demo runs, pre-ingest of the demo queries, schema export
+demo/                           web app that runs the pipeline live and visualizes each stage (see "Demo app")
+scripts/                        smoke test, traced demo runs, pre-ingest of the demo queries, schema export, topic map
 setup/                          database image, schema, OpenAlex topic embeddings
 notebooks/                      thesis experiments and evaluation, written against earlier versions of core (thesis-era
                                 code: commit 796e20c)
 ```
+
+### Demo app
+
+`demo/` is a small web app (FastAPI, server-sent events, plain JavaScript) that runs the pipeline for a query and shows
+each stage while it runs, from the trace events of `core/instrumentation.py`:
+
+- **Topic routing:** all 4,516 OpenAlex topics on a 2D map (UMAP of their embeddings), with the query's 10 most similar
+  topics.
+- **Hybrid retrieval:** BM25, dense and hybrid rankings side by side, with the LLM's final top 5 traced through them. The
+  blend can be changed in the browser (another weight, or reciprocal rank fusion) to see which candidates it would keep.
+- **LLM reranking:** the setwise heapsort as it happens, with the comparisons in flight, and the latest decision with
+  its prompt.
+- **Tailored summaries:** abstract, the filled-out reasoning structure, and the summary.
+- Time, tokens and cost per stage, and a timeline of all API calls.
+
+```sh
+uv run --env-file .env python -m demo        # http://localhost:8000
+```
+
+Every successful live run is saved to `demo/recordings/`; a replay plays such a recording in the browser with its
+original timing, without database or API key (`coral_reefs.json` and `rag_hallucinations.json` are committed). Keys
+1-4 switch between the stages; with "stage by stage", a replay pauses before each stage (space continues).
 
 ## Setup
 
