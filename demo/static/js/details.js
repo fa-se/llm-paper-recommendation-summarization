@@ -206,7 +206,7 @@ const CONTENT = {
       section(
         "The weights, and “What if?”",
         p("0.8 / 0.2 comes from Mandikal & Mooney (“Sparse Meets Dense”), not tuned here. Min-max has a flaw: each list's #1 gets 1, however weak it is. Reciprocal rank fusion (RRF) uses ranks only."),
-        p("“What if?” re-blends the recorded scores in the browser and says how many of the 50 candidates the LLM actually saw would stay. For coral, meaning weight 0.3 keeps only 23 of 50; RRF keeps 30. The LLM's result exists only for the recorded pool."),
+        p("“What if?” re-blends the recorded scores in the browser and says how many of the 50 candidates the LLM actually saw would stay. For coral, meaning weight 0.3 keeps only 25 of 50; RRF keeps 31. The LLM's result exists only for the recorded pool."),
       ),
       section(
         "If asked",
