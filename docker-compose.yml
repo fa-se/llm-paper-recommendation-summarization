@@ -26,7 +26,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # PG18 images keep the data in a version subdirectory (/var/lib/postgresql/18/docker), so mount the parent
+      - postgres18_data:/var/lib/postgresql
     #      - ./setup/init_db.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - postgres_network
@@ -34,7 +35,8 @@ services:
     ports:
       - "5432:5432"
 volumes:
-  postgres_data:
+  # since 2026-09-28 (PG18 + VectorChord-bm25); the PG16 + pg_bestmatch data is in the old volume postgres_data
+  postgres18_data:
 
 networks:
   postgres_network:

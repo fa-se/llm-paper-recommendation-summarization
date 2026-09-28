@@ -133,7 +133,7 @@ class RetrievalService:
 
         if new_works:
             with trace.stage("index"):
-                self.publication_repository.rebuild_bm25()
+                self.publication_repository.index_bm25()
         logger.info(f"Finished ingest. Added {len(new_works)} works.")
         return topics, new_works
 

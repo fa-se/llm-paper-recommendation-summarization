@@ -62,7 +62,7 @@ class ModelConfigTest(unittest.TestCase):
         url = Settings.from_env(env).database_url
         self.assertEqual(url.password, "p@ss/word")
         self.assertEqual(url.host, "h")
-        self.assertEqual(url.query["options"], "-csearch_path=public,bm_catalog")
+        self.assertEqual(url.query["options"], "-csearch_path=public,bm25_catalog,tokenizer_catalog")
 
 
 if __name__ == "__main__":

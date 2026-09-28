@@ -10,6 +10,10 @@ from core.works import Work
 # OpenAlex ID -> score, best first
 type Ranking = dict[int, float]
 
+# VectorChord-bm25's index on publication.bm25, and the pg_tokenizer tokenizer of abstracts and queries (setup/ddl.sql)
+BM25_INDEX = "publication_bm25"
+TOKENIZER = "bert"
+
 
 class PublicationRepository:
     def __init__(self, session: Session | scoped_session[Session]):
@@ -66,24 +70,20 @@ class PublicationRepository:
         return dict(self.session.execute(query).all())
 
     def search_by_bm25(self, query: str, n: int, start_date: datetime | None = None) -> Ranking:
-        """The n publications whose abstracts have the highest BM25 score for the query (pg_bestmatch)."""
-        start_date_filter = "AND publication_datetime_utc >= :start_date" if start_date is not None else ""
-        # MATERIALIZED: tokenize the query once, not once per row (for a paragraph-long query, 2 s -> 10 ms).
-        # <#> is pgvector's negative inner product.
+        """The n publications whose abstracts have the highest BM25 score for the query (VectorChord-bm25)."""
+        # exact: the index scores every abstract that shares a token with the query (brute force). By default it stops
+        # at its best 100 by block-max WAND, and a date filter afterwards could leave fewer than n.
+        self.session.execute(text("SET LOCAL bm25_catalog.bm25_limit = -1"))
+        start_date_filter = "WHERE publication_datetime_utc >= :start_date" if start_date is not None else ""
+        # the CTE tokenizes the query once, not again for every row returned; <&> is the negative BM25 score
         sql = f"""
-        WITH query_vector AS MATERIALIZED (
-            SELECT bm25_query_to_svector('publication_abstract_bm25', :query, 'pgvector')::sparsevec AS bm25
+        WITH query AS MATERIALIZED (
+            SELECT to_bm25query('{BM25_INDEX}', tokenize(:query, '{TOKENIZER}')) AS bm25
         )
-        SELECT openalex_id, score
-        FROM
-        (
-            SELECT openalex_id, publication.publication_datetime_utc,
-                    -(publication.bm25 <#> query_vector.bm25) AS score
-            FROM publication, query_vector
-        ) subquery
-        WHERE score != double precision 'NaN'
+        SELECT openalex_id, -(publication.bm25 <&> (SELECT bm25 FROM query)) AS score
+        FROM publication
         {start_date_filter}
-        ORDER BY score DESC
+        ORDER BY publication.bm25 <&> (SELECT bm25 FROM query)
         LIMIT :n;
         """
         params = {"query": query, "n": n}
@@ -91,26 +91,23 @@ class PublicationRepository:
             params["start_date"] = start_date
         return dict(self.session.execute(text(sql), params).all())
 
-    def rebuild_bm25(self):
-        """Updates the BM25 statistics (a materialized view of pg_bestmatch) and every publication's BM25 vector.
+    def index_bm25(self):
+        """Tokenizes the abstracts that have no BM25 vector yet, i.e. the new publications.
 
-        All vectors, not only the new publications' ones: a document vector depends on the corpus statistics (average
-        document length), which change with every ingest.
+        The BM25 index adds them to its corpus statistics (document count, average length, token frequencies) itself,
+        with the same scores as a rebuild, so the other publications need no update.
         """
-        view_exists = self.session.scalar(
-            text(
-                "SELECT EXISTS (SELECT FROM pg_matviews "
-                "WHERE schemaname = 'public' AND matviewname = 'publication_abstract_bm25')"
-            )
-        )
-        if view_exists:
-            self.session.execute(text("SELECT bm25_refresh('publication_abstract_bm25')"))
-        else:
-            self.session.execute(text("SELECT bm25_create('publication', 'abstract', 'publication_abstract_bm25')"))
         self.session.execute(
             text(
-                "UPDATE publication "
-                "SET bm25 = bm25_document_to_svector('publication_abstract_bm25', abstract, 'pgvector')::sparsevec"
+                f"UPDATE publication SET bm25 = tokenize(abstract, '{TOKENIZER}') "
+                "WHERE bm25 IS NULL AND abstract IS NOT NULL"
             )
         )
+        self.commit()
+
+    def rebuild_bm25(self):
+        """Tokenizes any new abstracts and rebuilds the BM25 index. Needed after deleting publications: the index drops
+        deleted rows from its statistics only when vacuumed, and a rebuild makes the scores exact at once."""
+        self.index_bm25()
+        self.session.execute(text(f"REINDEX INDEX {BM25_INDEX}"))
         self.commit()

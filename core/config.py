@@ -47,8 +47,8 @@ class Settings:
                 password=env.get("DB_PASSWORD"),
                 host=env.get("DB_HOST"),
                 database=env.get("DB_NAME"),
-                # pg_bestmatch keeps its functions and BM25 statistics in the bm_catalog schema
-                query={"options": "-csearch_path=public,bm_catalog"},
+                # the schemas of VectorChord-bm25 (bm25vector, to_bm25query) and pg_tokenizer (tokenize)
+                query={"options": "-csearch_path=public,bm25_catalog,tokenizer_catalog"},
             ),
             openai_api_key=env.get("OPENAI_API_KEY"),
             openalex_contact_email=env.get("OPENALEX_CONTACT_EMAIL"),

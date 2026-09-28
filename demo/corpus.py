@@ -1,8 +1,9 @@
 """The demo corpus: a baseline (the pre-ingested papers of the demo queries), and a reset to it.
 
-A live run with "fetch new papers first" adds papers to the corpus, and the BM25 index rebuild after it changes the
-statistics, and so the BM25 vectors, of all papers. Ingest only adds rows, so deleting the papers added after the
-baseline and rebuilding the index restores the corpus exactly; a checksum over all BM25 vectors confirms it.
+A live run with "fetch new papers first" adds papers to the corpus, and so changes the BM25 index's corpus statistics
+(document count, average length, token frequencies), and with them the scores of all papers. Ingest only adds rows, so
+deleting the papers added after the baseline and rebuilding the index restores the corpus exactly; a checksum over all
+papers' BM25 token vectors confirms the rows.
 
     uv run --env-file .env python -m demo.corpus [status | reset | snapshot]
 

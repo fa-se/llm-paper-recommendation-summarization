@@ -89,17 +89,21 @@ Every successful live run is saved to `demo/recordings/`; a replay plays such a 
 original timing, without database or API key (`coral_reefs.json` and `rag_hallucinations.json` are committed). Keys
 1-4 switch between the stages; with "stage by stage", a replay pauses before each stage (space continues).
 
-A live run with "fetch new papers first" adds papers to the corpus (and so changes every paper's BM25 statistics).
-"Reset corpus" in the page, or `uv run --env-file .env python -m demo.corpus reset`, deletes them again and rebuilds the
-BM25 index, which restores the baseline in `demo/corpus_baseline.json` exactly (checked by a checksum over all BM25
-vectors); `python -m demo.corpus snapshot` makes the current corpus the baseline.
+A live run with "fetch new papers first" adds papers to the corpus (and so changes the BM25 corpus statistics, and
+every paper's score). "Reset corpus" in the page, or `uv run --env-file .env python -m demo.corpus reset`, deletes them
+again and rebuilds the BM25 index, which restores the baseline in `demo/corpus_baseline.json` exactly (checked by a
+checksum over all papers' BM25 token vectors); `python -m demo.corpus snapshot` makes the current corpus the baseline.
 
 ## Setup
 
 ### Prerequisites
-- PostgreSQL instance
-    - with [pgvector](https://github.com/pgvector/pgvector) (tested with 0.7.2 and 0.8.0)
-    - with [pg_bestmatch_rs](https://github.com/tensorchord/pg_bestmatch.rs) (for BM25, tested with 0.0.1)
+- PostgreSQL 18 (tested with 18.6)
+    - with [pgvector](https://github.com/pgvector/pgvector) (tested with 0.8.6)
+    - with [VectorChord-bm25](https://github.com/tensorchord/VectorChord-bm25) (BM25, tested with 0.3.0) and
+      [pg_tokenizer](https://github.com/tensorchord/pg_tokenizer.rs) (tested with 0.1.1), both in
+      `shared_preload_libraries`
+    - `setup/Dockerfile` builds such an image (amd64 and arm64, from release packages); `docker compose up -d db`
+      runs it
 - Docker with Docker Compose, or [uv](https://docs.astral.sh/uv/) to run it locally
 - OpenAI API key
 
@@ -108,9 +112,39 @@ vectors); `python -m demo.corpus snapshot` makes the current corpus the baseline
    E.g. `psql -U [DB_USER] -d [DB_NAME] -f setup/ddl.sql`
 2. Load OpenAlex embeddings for topic matching via `setup/openalex_embeddings.sql`.\
    E.g. `psql -U [DB_USER] -d [DB_NAME] -f setup/openalex_embeddings.sql`
+3. Optional: restart the database, so that it loads the BM25 tokenizer at startup (`setup/ddl.sql` sets this up)
+   instead of in each new connection.
 
-A database created before duplicate detection was added needs a one-off migration, which also removes the duplicates
-and junk abstracts already stored: `uv run --env-file .env scripts/dedupe_publications.py [--dry-run]`.
+`pg_dump` leaves out the BM25 tokenizer (it lives in pg_tokenizer's extension tables). To restore a dump, create the
+schema with `setup/ddl.sql` first, then restore the data only (`pg_restore --data-only`).
+
+### BM25 since September 2026: VectorChord-bm25 instead of pg_bestmatch.rs
+The thesis computed BM25 with [pg_bestmatch.rs](https://github.com/tensorchord/pg_bestmatch.rs) on PostgreSQL 16.
+pg_bestmatch.rs is no longer maintained (no commits since November 2024, PostgreSQL 17 at most), so BM25 now comes from
+its successor by the same team, VectorChord-bm25, on PostgreSQL 18. **BM25 rankings differ from the thesis's**, so its
+comparison of BM25, dense and hybrid retrieval (Tables 6-9) doesn't reproduce exactly:
+- The same: the tokenizer (BERT's lowercased WordPiece vocabulary, `bert_base_uncased`), the IDF
+  `ln((N + 1) / (df + 0.5))`, k1 = 1.2 and b = 0.75.
+- Different: a token that occurs several times in the query counts that many times (pg_bestmatch counted each distinct
+  query token once); document lengths are stored quantized, as in Lucene; and scores are k1 + 1 times larger, which
+  doesn't change the ranking.
+- Measured on the demo corpus (3,509 papers), against pg_bestmatch: for 30 abstracts as queries, the BM25 top 10 shares
+  61 % of its papers on average, the top 100 71 %. For the two demo descriptions, 5 and 8 of the top 10. Counting each
+  query token once instead gives 97 % and 98 %, so nearly all of the difference is the query weighting. The hybrid
+  top 50 that goes to the LLM hardly changes, as BM25 weighs 0.2 in the blend: 49 of 50 papers stay, for both demo
+  descriptions.
+- For pg_bestmatch's query weighting: in `PublicationRepository.search_by_bm25`, count each query token once, i.e.
+  replace `tokenize(...)` by `(SELECT array_agg(DISTINCT t) FROM unnest(tokenize(...)) t)`.
+
+New papers only need tokenizing: the index adds them to its corpus statistics itself. Before, each ingest recomputed
+the BM25 vector of every paper.
+
+### Upgrading a database from before September 2026 (PostgreSQL 16 + pg_bestmatch.rs)
+The compose file now uses a new volume (`postgres18_data`); the old one (`postgres_data`) stays as it is. A plain dump
+doesn't restore into the new schema (the `bm25` column changed type): copy the four `openalex_*` tables with
+`pg_dump --data-only`, and the publications without their `bm25` column (`\copy (SELECT <all other columns> FROM
+publication) TO STDOUT`, then `\copy publication(<the same columns>) FROM STDIN`), into a database created from
+`setup/ddl.sql`; then `PublicationRepository.rebuild_bm25()` tokenizes the abstracts.
 
 ### Setup Instructions
 1. Copy `.env.example` to `.env` and fill in the required values (database connection parameters, OpenAI API key, etc).

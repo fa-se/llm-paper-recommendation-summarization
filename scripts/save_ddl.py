@@ -12,8 +12,16 @@ from core.sqlalchemy_models import Base
 DDL_PATH = Path(__file__).parents[1] / "setup" / "ddl.sql"
 
 HEADER = """CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS pg_bestmatch;
-SET search_path TO public, bm_catalog;
+-- BM25: VectorChord-bm25 (index, scoring) and pg_tokenizer; both must be in shared_preload_libraries (setup/Dockerfile)
+CREATE EXTENSION IF NOT EXISTS pg_tokenizer CASCADE;
+CREATE EXTENSION IF NOT EXISTS vchord_bm25 CASCADE;
+SET search_path TO public, bm25_catalog, tokenizer_catalog;
+-- the tokenizer of abstracts and queries: BERT's lowercased WordPiece vocabulary, as with pg_bestmatch.rs before.
+-- Tokenizers live in extension tables that pg_dump leaves out: create it again in a restored database.
+SELECT create_tokenizer('bert', $$model = "bert_base_uncased"$$);
+-- load it at server start, instead of the default llmlingua2 (200 MB, unused)
+SELECT add_preload_model('bert_base_uncased');
+SELECT remove_preload_model('llmlingua2');
 """
 
 

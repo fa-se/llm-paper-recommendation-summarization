@@ -1,21 +1,22 @@
-FROM pgvector/pgvector:0.7.2-pg16
+FROM postgres:18.6-trixie
 
-RUN apt-get update && apt-get install -y curl git build-essential clang postgresql-server-dev-16
+# pgvector (dense search) from the PGDG apt repo that the postgres image already has; VectorChord-bm25 (BM25 index) and
+# pg_tokenizer (the tokenizer it is used with) from their release packages, for amd64 and arm64
+ARG PGVECTOR=0.8.6
+ARG VCHORD_BM25=0.3.0
+ARG PG_TOKENIZER=0.1.1
 
-# Rust toolchain from mid-2024, matching cargo-pgrx 0.12.0-alpha.1 (newer rustc/deps break the old pgrx build)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.79.0
-ENV PATH="/root/.cargo/bin:${PATH}"
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends curl ca-certificates; \
+    curl -fsSL -o /tmp/vchord-bm25.deb \
+        "https://github.com/supervc-stack/VectorChord-bm25/releases/download/${VCHORD_BM25}/postgresql-${PG_MAJOR}-vchord-bm25_${VCHORD_BM25}-1_${arch}.deb"; \
+    curl -fsSL -o /tmp/pg-tokenizer.deb \
+        "https://github.com/supervc-stack/pg_tokenizer.rs/releases/download/${PG_TOKENIZER}/postgresql-${PG_MAJOR}-pg-tokenizer_${PG_TOKENIZER}-1_${arch}.deb"; \
+    apt-get install -y "postgresql-${PG_MAJOR}-pgvector=${PGVECTOR}-*" /tmp/vchord-bm25.deb /tmp/pg-tokenizer.deb; \
+    apt-get purge -y --auto-remove curl ca-certificates; \
+    rm -rf /tmp/*.deb /var/lib/apt/lists/*
 
-# Pinned to upstream 3126173 (merge of PR #15, which fixes bm25_refresh). Later commits need pgrx 0.12.7
-# and change the tokenizer API.
-ARG PG_BESTMATCH_COMMIT=312617392c8a32121907496f05c23fce1e3d056c
-RUN git clone https://github.com/tensorchord/pg_bestmatch.rs.git \
-    && git -C pg_bestmatch.rs checkout ${PG_BESTMATCH_COMMIT}
-WORKDIR pg_bestmatch.rs
-
-RUN cargo install --locked cargo-pgrx@=0.12.0-alpha.1 \
-    && cargo pgrx init --pg16=$(which pg_config) \
-    && cargo pgrx install --release
-
-WORKDIR ..
-RUN rm -rf pg_bestmatch.rs
+# both BM25 extensions must be preloaded; pg_tokenizer refuses to work otherwise
+CMD ["postgres", "-c", "shared_preload_libraries=vchord_bm25,pg_tokenizer"]

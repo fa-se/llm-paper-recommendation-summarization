@@ -7,13 +7,23 @@ query to the parts of OpenAlex to fetch works from. The schema in setup/ddl.sql 
 
 from datetime import datetime
 
-from pgvector.sqlalchemy import SPARSEVEC, Vector
-from sqlalchemy import ARRAY, BigInteger, DateTime, ForeignKey, Integer, String
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import ARRAY, BigInteger, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import UserDefinedType
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class Bm25Vector(UserDefinedType):
+    """VectorChord-bm25's bm25vector: token id -> count, e.g. {1012:1, 2829:2}. Only Postgres reads it."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw):
+        return "bm25vector"
 
 
 class OpenAlexEntity(Base):
@@ -72,6 +82,8 @@ class Topic(OpenAlexEntity):
 
 class Publication(Base):
     __tablename__ = "publication"
+    # VectorChord-bm25's index: BM25 search, and the corpus statistics it needs (document count, lengths, frequencies)
+    __table_args__ = (Index("publication_bm25", "bm25", postgresql_using="bm25", postgresql_ops={"bm25": "bm25_ops"}),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     openalex_id: Mapped[int] = mapped_column(BigInteger, unique=True)  # OpenAlex ids are too large for an Integer
@@ -80,8 +92,8 @@ class Publication(Base):
     publication_datetime_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     accessed_datetime_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     abstract: Mapped[str] = mapped_column(String, nullable=True)
-    # BM25 document vector of the abstract; recomputed for all rows on every ingest (PublicationRepository.rebuild_bm25)
-    bm25: Mapped[list[float]] = mapped_column(SPARSEVEC, nullable=True)
+    # the abstract's tokens, for BM25 search (PublicationRepository.index_bm25); the index keeps the corpus statistics
+    bm25: Mapped[str] = mapped_column(Bm25Vector, nullable=True, deferred=True)
     embedding: Mapped[list[float]] = mapped_column(Vector(1024))
     # hashes of the normalized title and abstract, used to skip duplicates (see core/services/deduplication.py)
     title_key: Mapped[str] = mapped_column(String(40), nullable=True, index=True)

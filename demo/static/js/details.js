@@ -62,7 +62,7 @@ const CONTENT = {
       "Stack",
       facts(
         ["Pipeline", "Python 3.14 library (uv): SQLAlchemy 2 + psycopg 3, pyalex, openai"],
-        ["Database", "PostgreSQL 16 in Docker, with pgvector 0.7 and pg_bestmatch.rs (BM25)"],
+        ["Database", "PostgreSQL 18 in Docker, with pgvector 0.8 and VectorChord-bm25 (BM25)"],
         ["This page", "FastAPI, server-sent events, plain JavaScript with SVG and canvas; no framework and no CDN, so replays work offline"],
         ["Models", "text-embedding-3-large (1,024 dimensions), gpt-6-luna for comparisons, gpt-6-sol for summaries. In 2024: gpt-4o-mini and gpt-4o."],
       ),
@@ -70,10 +70,10 @@ const CONTENT = {
     section(
       "Data model",
       ul(
-        [b("publication: "), "OpenAlex id, title, first 3 authors, date, abstract, embedding vector(1024), BM25 sparse vector, and keys for duplicate detection."],
+        [b("publication: "), "OpenAlex id, title, first 3 authors, date, abstract, embedding vector(1024), BM25 token vector, and keys for duplicate detection."],
         [b("openalex_topic: "), "4,516 rows with name, description, keywords and embedding (plus the domain, field and subfield levels above them). Embedded once from “Topic: …; Description: …; Keywords: …”, for $0.07."],
         [b("Vector search "), "is an exact scan without an index: milliseconds at this size (the thesis corpus had ~50k papers)."],
-        [b("BM25: "), "pg_bestmatch.rs keeps corpus statistics and stores each abstract as a sparse vector; the query becomes one too, and the score is an inner product. Rebuilt after each ingest."],
+        [b("BM25: "), "each abstract is stored as token counts (BERT's vocabulary, via pg_tokenizer); VectorChord-bm25's index keeps the corpus statistics and scores the query against them. New papers are added to the index as they come in."],
         [b("Duplicates: "), "OpenAlex has duplicate records (about 12 % of the papers fetched here): the same title or abstract under different ids. Dropped at ingest, as are “abstracts” under 20 words."],
       ),
     ),
@@ -85,13 +85,14 @@ const CONTENT = {
         "Duplicates filtered; strict JSON output for the summaries.",
         "Every step is traced (time, tokens, $) as events; they drive this page, and each run is recorded for replay.",
         "Refactored, with a test harness showing identical prompts, events and database rows before and after.",
+        "After the talk: PostgreSQL 18 with VectorChord-bm25, replacing pg_bestmatch.rs, which is no longer maintained.",
       ),
     ),
     section(
       "Two fixes merged upstream during the thesis",
       ul(
         [b("pyalex PR #35 "), "(March 2024, release 0.14): support for Topics, Domains, Fields and Subfields. OpenAlex had replaced its Concepts taxonomy with Topics mid-thesis, and the Python client didn't know them yet; the topic routing is built on this."],
-        [b("pg_bestmatch.rs PR #15 "), "(July 2024): a one-line fix for a wrong table name that made the BM25 refresh fail; the pipeline runs that refresh after every ingest."],
+        [b("pg_bestmatch.rs PR #15 "), "(July 2024): a one-line fix for a wrong table name that made the BM25 refresh fail; the pipeline ran that refresh after every ingest until the move to VectorChord-bm25 in 2026."],
       ),
     ),
     section(
@@ -99,7 +100,7 @@ const CONTENT = {
       qa(
         ["Why Postgres, not a vector database?", "Vectors, keyword index and metadata live in one database with one query language. At this size an exact vector scan takes milliseconds; a dedicated vector store would matter at millions of vectors."],
         ["What does it cost?", "Per query about $0.03 and 25 s. Ingest about $0.09 per 2,000 new papers (the embeddings). The topic embeddings once: $0.07."],
-        ["What's next for the stack?", "After today: Postgres 18, current pgvector, and VectorChord-bm25, because pg_bestmatch.rs is no longer maintained."],
+        ["Why VectorChord-bm25?", "The thesis used pg_bestmatch.rs, which has had no commits since 2024 and supports at most Postgres 17. VectorChord-bm25 is its successor from the same team: a real BM25 index, with the same tokenizer."],
       ),
     ),
   ],
@@ -192,7 +193,7 @@ const CONTENT = {
       section(
         "How it works",
         ul(
-          [b("Keyword (BM25): "), "the classic search-engine score. A word counts more when it's rare in the corpus and frequent in the paper, with diminishing returns. Computed in Postgres by pg_bestmatch.rs."],
+          [b("Keyword (BM25): "), "the classic search-engine score. A word counts more when it's rare in the corpus and frequent in the paper, with diminishing returns. Computed in Postgres by VectorChord-bm25."],
           [b("Meaning (dense): "), "cosine similarity between the description's embedding and each abstract's embedding (pgvector)."],
           [b("Blend: "), "each search returns its top 100; scores are min-max normalized (its #1 = 1, its #100 = 0) and added with weights 0.8 meaning + 0.2 keyword. The top 50 go to the LLM: 10 × the 5 results wanted."],
         ),
