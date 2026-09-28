@@ -18,5 +18,6 @@ RUN set -eux; \
     apt-get purge -y --auto-remove curl ca-certificates; \
     rm -rf /tmp/*.deb /var/lib/apt/lists/*
 
-# both BM25 extensions must be preloaded; pg_tokenizer refuses to work otherwise
-CMD ["postgres", "-c", "shared_preload_libraries=vchord_bm25,pg_tokenizer"]
+# both BM25 extensions must be preloaded; pg_tokenizer refuses to work otherwise. The default max_wal_size (1 GB) is
+# more than this database's size; Postgres keeps that much WAL around after a bulk write (e.g. an ingest)
+CMD ["postgres", "-c", "shared_preload_libraries=vchord_bm25,pg_tokenizer", "-c", "max_wal_size=256MB"]
