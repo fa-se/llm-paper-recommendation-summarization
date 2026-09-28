@@ -135,6 +135,11 @@ comparison of BM25, dense and hybrid retrieval (Tables 6-9) doesn't reproduce ex
   descriptions.
 - For pg_bestmatch's query weighting: in `PublicationRepository.search_by_bm25`, count each query token once, i.e.
   replace `tokenize(...)` by `(SELECT array_agg(DISTINCT t) FROM unnest(tokenize(...)) t)`.
+- Better or worse? Measured with the thesis' citation proxy (`scripts/eval_bm25.py`: 83 of its query papers, the
+  abstract as the query, the cited papers as the right answers, BM25 alone): the new weighting finds more of the cited
+  papers in the BM25 top 100 (recall 0.507 vs 0.480 with each query token counted once, p = 0.007), and about as many
+  in the top 10 (5.22 vs 4.98, p = 0.11). Whole words, stemmed and without stopwords, instead of BERT's word pieces:
+  5.59 in the top 10 (p = 0.04), the same recall in the top 100; not adopted.
 
 New papers only need tokenizing: the index adds them to its corpus statistics itself. Before, each ingest recomputed
 the BM25 vector of every paper.
